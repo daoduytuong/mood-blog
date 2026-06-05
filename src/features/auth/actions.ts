@@ -28,8 +28,11 @@ export async function signIn(
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({ email, password });
 
-  // Giọng "Lặng mát": gộp mọi lỗi auth về một câu ấm, không phơi lỗi kỹ thuật.
-  if (error) return { error: "Thông tin chưa đúng, thử lại nhé." };
+  if (error) {
+    // Log nguyên nhân thật ra terminal dev (để gỡ lỗi); UI vẫn giữ giọng dịu.
+    console.error("[signIn] auth error:", error.status, error.code, error.message);
+    return { error: "Thông tin chưa đúng, thử lại nhé." };
+  }
 
   redirect(returnTo);
 }
