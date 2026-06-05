@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Lora, Inter } from "next/font/google";
+import Link from "next/link";
+import { AuthorNav } from "@/components/AuthorNav";
 import "./globals.css";
 
 // Lora (serif) — giọng của cảm xúc: lời viết, tiêu đề, trích dẫn.
@@ -36,7 +38,19 @@ export default function RootLayout({
       lang="vi"
       className={`${lora.variable} ${inter.variable} h-full antialiased`}
     >
-      <body className="min-h-full">{children}</body>
+      <body className="min-h-full">
+        <header className="mx-auto flex w-full max-w-container items-center justify-between px-4.5 py-4">
+          <Link
+            href="/"
+            className="text-text"
+            style={{ fontFamily: "var(--font-serif)" }}
+          >
+            khoảnh khắc của tôi
+          </Link>
+          <AuthorNav />
+        </header>
+        {children}
+      </body>
     </html>
   );
 }
