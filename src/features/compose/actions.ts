@@ -64,5 +64,6 @@ export async function createMoment(
     return { error: "Chưa lưu được bài, thử lại nhé." };
   }
 
-  redirect(`/m/${slug}`);
+  // Về Feed: bài mới nằm trên cùng (UJ-1). Trang chi tiết /m/[slug] xây ở Story 2.4.
+  redirect("/");
 }
