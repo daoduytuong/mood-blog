@@ -1,26 +1,43 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/*
+  Design system "Lặng mát" — nguồn chân lý token ở DESIGN.md.
+  Light mode only (không dark mode ở v1).
+  Màu tâm trạng: dùng qua src/lib/moods.ts (mood_code -> tokenVar), KHÔNG hardcode hex nơi khác.
+*/
+@theme {
+  /* Trung tính & điểm nhấn */
+  --color-background: #f2f6f8; /* nền trang — ánh ban mai */
+  --color-surface: #fbfdfe; /* mặt thẻ */
+  --color-text: #3e4a53; /* chữ chính */
+  --color-text-muted: #8c9aa4; /* chữ mờ */
+  --color-border: #dee8ed; /* viền mảnh */
+  --color-accent: #6fa3b8; /* tim, link, nút chính */
+  --color-on-accent: #ffffff;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  /* 6 sắc màu tâm trạng */
+  --color-mood-hoai-niem: #c7b4ae;
+  --color-mood-binh-yen: #a6cbc9;
+  --color-mood-vui: #e8ce93;
+  --color-mood-buon: #8fa9c6;
+  --color-mood-tram-tu: #9faac0;
+  --color-mood-co-don: #b4c0c8;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Font (gán từ next/font ở layout.tsx) */
+  --font-serif: var(--font-lora);
+  --font-sans: var(--font-inter);
+
+  /* Bo góc */
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+
+  /* Bố cục */
+  --spacing-container: 600px; /* chiều rộng tối đa một cột */
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-background);
+  color: var(--color-text);
+  font-family: var(--font-sans), system-ui, sans-serif;
 }
