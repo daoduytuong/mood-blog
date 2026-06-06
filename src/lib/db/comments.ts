@@ -3,6 +3,10 @@ import type { MoodCode } from "@/lib/moods";
 
 type DB = SupabaseClient;
 
+// Cột tường minh — KHÔNG select anon_id/anon_ip (danh tính/IP người xem, đã REVOKE ở 0007).
+const COLS =
+  "id, post_id, parent_id, user_id, author_name, body, mood, is_hidden, created_at";
+
 // Domain type (camelCase) — ranh giới map snake_case (DB) <-> camelCase (TS).
 export interface Comment {
   id: string;
@@ -46,10 +50,11 @@ function toComment(r: CommentRow): Comment {
 export async function listComments(sb: DB, postId: string): Promise<Comment[]> {
   const { data, error } = await sb
     .from("comments")
-    .select("*")
+    .select(COLS)
     .eq("post_id", postId)
     .eq("is_hidden", false)
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: true })
+    .limit(200); // chống phình render (DoS dung lượng); phân trang để sau nếu cần
   if (error || !data) return [];
   return (data as CommentRow[]).map(toComment);
 }
@@ -77,7 +82,7 @@ export async function insertComment(sb: DB, input: NewComment): Promise<Comment>
       user_id: input.userId ?? null,
       parent_id: input.parentId ?? null,
     })
-    .select("*")
+    .select(COLS)
     .single();
   if (error || !data) throw error ?? new Error("insertComment failed");
   return toComment(data as CommentRow);
@@ -107,7 +112,7 @@ export async function listRecentCommentsForPosts(
   if (postIds.length === 0) return [];
   const { data, error } = await sb
     .from("comments")
-    .select("*")
+    .select(COLS)
     .in("post_id", postIds)
     .eq("is_hidden", false)
     .order("created_at", { ascending: false })
