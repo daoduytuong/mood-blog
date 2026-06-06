@@ -7,6 +7,7 @@ import { getBySlug, listSlugs } from "@/lib/db/posts";
 import { mediaPublicUrl } from "@/lib/storage";
 import { siteUrl } from "@/lib/site";
 import { MoodBar, MoodLabel } from "@/components/post/MoodBar";
+import { PostAuthorActions } from "@/components/post/PostAuthorActions";
 import { HeartButton } from "@/features/hearts/HeartButton";
 import { VideoEmbed } from "@/components/ui/VideoEmbed";
 
@@ -137,6 +138,8 @@ export default async function PostDetail({
           <div className="pt-2">
             <HeartButton postId={post.id} />
           </div>
+
+          <PostAuthorActions postId={post.id} slug={post.slug} />
         </div>
       </article>
     </main>

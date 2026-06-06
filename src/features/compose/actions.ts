@@ -1,11 +1,17 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { createPost, getBySlug } from "@/lib/db/posts";
+import {
+  createPost,
+  getBySlug,
+  updatePost,
+  deletePost,
+} from "@/lib/db/posts";
 import { slugify } from "./slug";
 import { momentSchema, gocDocSchema } from "./schema";
-import type { MoodCode } from "@/lib/moods";
+import { MOOD_CODES, type MoodCode } from "@/lib/moods";
 
 export interface ComposeState {
   error: string | null;
@@ -129,5 +135,97 @@ export async function createGocDoc(
     return { error: "Chưa lưu được bài, thử lại nhé." };
   }
 
+  redirect("/");
+}
+
+// Story 1.7 — sửa NỘI DUNG + TÂM TRẠNG (KHÔNG đổi slug, KHÔNG đổi ảnh/loại).
+// Ảnh giữ nguyên (thay ảnh là phạm vi khác); slug giữ để OG/sitemap/link không gãy.
+export async function updatePostAction(
+  _prev: ComposeState,
+  formData: FormData,
+): Promise<ComposeState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Bạn cần đăng nhập đã nhé." };
+
+  const id = String(formData.get("id") ?? "");
+  const slug = String(formData.get("slug") ?? "");
+  const type = String(formData.get("type") ?? "");
+  const mood = String(formData.get("mood") ?? "");
+  const caption = String(formData.get("caption") ?? "").trim();
+  if (!id || !slug) return { error: "Thiếu thông tin bài, thử lại nhé." };
+  if (!MOOD_CODES.includes(mood as MoodCode))
+    return { error: "Chọn một tâm trạng giúp mình nhé." };
+
+  // RLS posts_author_all chỉ cho author sửa; vẫn kiểm chủ sở hữu để báo lỗi tử tế.
+  const existing = await getBySlug(supabase, slug);
+  if (!existing || existing.id !== id) return { error: "Không tìm thấy bài." };
+  if (existing.authorId !== user.id)
+    return { error: "Bài này không phải của bạn." };
+
+  const patch: Parameters<typeof updatePost>[2] = {
+    mood: mood as MoodCode,
+    caption: caption || null,
+  };
+
+  if (type === "goc_doc") {
+    const excerpt = String(formData.get("excerpt") ?? "").trim();
+    const linkUrl = String(formData.get("linkUrl") ?? "").trim();
+    if (!linkUrl && !excerpt)
+      return { error: "Thêm một link hoặc đoạn trích nhé." };
+    if (linkUrl) {
+      try {
+        new URL(linkUrl);
+      } catch {
+        return { error: "Link chưa hợp lệ, kiểm lại nhé." };
+      }
+    }
+    patch.excerpt = excerpt || null;
+    patch.linkUrl = linkUrl || null;
+  }
+
+  try {
+    await updatePost(supabase, id, patch);
+  } catch {
+    return { error: "Chưa lưu được, thử lại nhé." };
+  }
+
+  // ISR: Feed + chi tiết tươi ngay (đổi mood -> đổi màu, đổi caption -> đổi text/OG).
+  revalidatePath("/");
+  revalidatePath(`/m/${slug}`);
+  redirect(`/m/${slug}`);
+}
+
+// Story 1.7 — xoá bài (hearts cascade theo FK -> tổng tim /me tự rụng).
+export async function deletePostAction(formData: FormData): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const id = String(formData.get("id") ?? "");
+  const slug = String(formData.get("slug") ?? "");
+  if (!id) redirect("/");
+
+  // Dọn ảnh ở Storage (best-effort) trước khi xoá hàng — tránh rác.
+  const existing = slug ? await getBySlug(supabase, slug) : null;
+  if (existing && existing.authorId === user.id) {
+    const paths = existing.media
+      .map((m) => m.path)
+      .filter((p): p is string => !!p);
+    if (paths.length) await supabase.storage.from("media").remove(paths);
+  }
+
+  try {
+    await deletePost(supabase, id); // RLS đảm bảo chỉ author xoá được
+  } catch {
+    redirect(`/m/${slug}`); // xoá hụt -> quay lại bài, không nuốt lỗi âm thầm
+  }
+
+  if (slug) revalidatePath(`/m/${slug}`);
+  revalidatePath("/");
   redirect("/");
 }
