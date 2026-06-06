@@ -85,6 +85,7 @@ export default async function PostDetail({
               videoId={media!.video_id!}
               poster={media!.poster_url}
               caption={post.caption ?? undefined}
+              autoPlay
             />
           ) : imgPath ? (
             <ImageBlur
