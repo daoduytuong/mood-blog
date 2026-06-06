@@ -103,6 +103,21 @@ export async function deleteComment(sb: DB, id: string): Promise<void> {
   if (error) throw error;
 }
 
+/** Tổng số bình luận chưa ẩn trên các bài đã cho (cho dải tổng quan /me). Lỗi -> 0. */
+export async function countCommentsForPosts(
+  sb: DB,
+  postIds: string[],
+): Promise<number> {
+  if (postIds.length === 0) return 0;
+  const { count, error } = await sb
+    .from("comments")
+    .select("id", { count: "exact", head: true })
+    .in("post_id", postIds)
+    .eq("is_hidden", false);
+  if (error) return 0;
+  return count ?? 0;
+}
+
 /** Hộp thư tác giả: bình luận mới nhất trên các bài đã cho. Defensive: lỗi -> []. */
 export async function listRecentCommentsForPosts(
   sb: DB,

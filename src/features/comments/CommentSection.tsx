@@ -84,21 +84,42 @@ export function CommentSection({
     if (!parsed.success) {
       return setError(parsed.error.issues[0]?.message ?? "Có gì đó chưa ổn.");
     }
+    const draftBody = parsed.data.body;
+    const draftName = parsed.data.authorName;
+    const draftMood = mood;
+    const tempId = `temp-${Date.now()}`;
+    const optimistic: Comment = {
+      id: tempId,
+      postId,
+      parentId: null,
+      userId: null,
+      authorName: draftName,
+      body: draftBody,
+      mood: draftMood,
+      isHidden: false,
+      createdAt: new Date().toISOString(),
+    };
+    // Optimistic: lời hiện NGAY + dọn ô (honeypot/throttle đã kiểm ở trên).
+    setComments((cs) => [...cs, optimistic]);
+    setBody("");
+    setMood(null);
     setPending(true);
     try {
       const created = await insertComment(createClient(), {
         postId,
-        body: parsed.data.body,
-        authorName: parsed.data.authorName,
-        mood,
+        body: draftBody,
+        authorName: draftName,
+        mood: draftMood,
         anonId: getAnonId(),
       });
-      setCommenterName(parsed.data.authorName);
+      setCommenterName(draftName);
       markCommented();
-      setComments((cs) => [...cs, created]);
-      setBody("");
-      setMood(null);
+      setComments((cs) => cs.map((c) => (c.id === tempId ? created : c)));
     } catch {
+      // Lỗi: gỡ lời tạm + KHÔNG mất chữ đã gõ (C2).
+      setComments((cs) => cs.filter((c) => c.id !== tempId));
+      setBody(draftBody);
+      setMood(draftMood);
       setError("Chưa gửi được, thử lại nhé.");
     } finally {
       setPending(false);
@@ -178,6 +199,7 @@ export function CommentSection({
                 authorId={authorId}
                 canModerate={isAuthor}
                 onModerate={moderate}
+                pending={c.id.startsWith("temp-")}
               />
 
               {repliesOf(c.id).map((r) => (
@@ -320,17 +342,20 @@ function CommentItem({
   authorId,
   canModerate = false,
   onModerate,
+  pending = false,
 }: {
   comment: Comment;
   authorId: string;
   canModerate?: boolean;
   onModerate?: (id: string, action: "hide" | "delete") => void;
+  pending?: boolean;
 }) {
   // Badge "tác giả" = SERVER-TRUTH: user_id của bình luận trùng author của bài.
   const isAuthorReply = comment.userId != null && comment.userId === authorId;
   return (
     <div
-      className={comment.mood ? "border-l-2 pl-3" : ""}
+      aria-busy={pending || undefined}
+      className={`${comment.mood ? "border-l-2 pl-3" : ""} ${pending ? "opacity-60" : ""}`}
       style={comment.mood ? { borderColor: moodColor(comment.mood) } : undefined}
     >
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
