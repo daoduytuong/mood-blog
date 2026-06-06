@@ -5,7 +5,7 @@ export function MoodBar({ mood }: { mood: MoodCode }) {
   return (
     <span
       aria-hidden
-      className="absolute left-0 top-0 bottom-0 w-1"
+      className="absolute bottom-0 left-0 top-0 w-1"
       style={{ background: `var(${MOODS[mood].tokenVar})` }}
     />
   );

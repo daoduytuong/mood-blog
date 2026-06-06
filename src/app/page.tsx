@@ -23,8 +23,8 @@ export default async function Home() {
   return (
     <main className="mx-auto w-full max-w-container px-4.5 py-8">
       <div className="flex flex-col gap-6">
-        {posts.map((post) => (
-          <PostCard key={post.id} post={post} />
+        {posts.map((post, i) => (
+          <PostCard key={post.id} post={post} priority={i === 0} />
         ))}
       </div>
     </main>

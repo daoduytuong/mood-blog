@@ -32,6 +32,10 @@
   --radius-md: 0.75rem;
   --radius-lg: 1rem;
 
+  /* Bóng đổ (tĩnh — KHÔNG bóng-nở khi hover) */
+  --shadow-card: 0 4px 20px rgba(62, 74, 83, 0.06);
+  --shadow-soft: 0 4px 20px rgba(62, 74, 83, 0.12);
+
   /* Bố cục */
   --spacing-container: 600px; /* chiều rộng tối đa một cột */
 }
