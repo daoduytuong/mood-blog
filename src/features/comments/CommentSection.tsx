@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { listComments, insertComment, type Comment } from "@/lib/db/comments";
 import { formatPostDate } from "@/lib/date";
+import { MOODS, MOOD_CODES, moodColor, type MoodCode } from "@/lib/moods";
 import { commentSchema, replyBodySchema } from "./schema";
 import { getAnonId, getCommenterName, setCommenterName } from "./identity";
 
@@ -22,6 +23,7 @@ export function CommentSection({
   const [isAuthor, setIsAuthor] = useState(false);
   const [name, setName] = useState("");
   const [body, setBody] = useState("");
+  const [mood, setMood] = useState<MoodCode | null>(null); // tùy chọn
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [replyTo, setReplyTo] = useState<string | null>(null);
@@ -45,6 +47,12 @@ export function CommentSection({
   const repliesOf = (id: string) =>
     comments.filter((c) => c.parentId === id);
 
+  // Nhiệt kế cảm xúc: gộp tâm trạng người xem đã chọn (theo thứ tự MOOD_CODES).
+  const moodCounts = MOOD_CODES.map((code) => ({
+    code,
+    count: comments.filter((c) => c.mood === code).length,
+  })).filter((m) => m.count > 0);
+
   async function submitTop(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -58,11 +66,13 @@ export function CommentSection({
         postId,
         body: parsed.data.body,
         authorName: parsed.data.authorName,
+        mood,
         anonId: getAnonId(),
       });
       setCommenterName(parsed.data.authorName);
       setComments((cs) => [...cs, created]);
       setBody("");
+      setMood(null);
     } catch {
       setError("Chưa gửi được, thử lại nhé.");
     } finally {
@@ -96,9 +106,26 @@ export function CommentSection({
 
   return (
     <section className="mt-10 border-t border-border pt-6">
-      <h2 className="mb-5 text-sm font-medium text-text-muted">
+      <h2 className="mb-3 text-sm font-medium text-text-muted">
         Đôi lời{roots.length > 0 ? ` (${roots.length})` : ""}
       </h2>
+
+      {/* Nhiệt kế cảm xúc — KHÔNG phải đếm like, mà là "trang này khiến người ta thấy gì". */}
+      {moodCounts.length > 0 && (
+        <div className="mb-6 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-text-muted">
+          <span>Mọi người thấy</span>
+          {moodCounts.map(({ code, count }) => (
+            <span key={code} className="inline-flex items-center gap-1.5">
+              <span
+                aria-hidden
+                className="h-2.5 w-2.5 rounded-full"
+                style={{ background: moodColor(code) }}
+              />
+              {MOODS[code].label} · {count}
+            </span>
+          ))}
+        </div>
+      )}
 
       {roots.length === 0 ? (
         <p className="text-sm text-text-muted">
@@ -181,6 +208,37 @@ export function CommentSection({
           placeholder="Đôi lời gửi tới…"
           className="resize-none rounded-md border border-border bg-surface px-3 py-2 font-serif text-text outline-none focus:border-accent"
         />
+
+        {/* Tâm trạng — TÙY CHỌN: "bài này khiến bạn thấy…" */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-xs text-text-muted">
+            Bài này khiến bạn thấy…
+          </span>
+          {MOOD_CODES.map((code) => {
+            const selected = mood === code;
+            return (
+              <button
+                key={code}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => setMood(selected ? null : code)}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                  selected
+                    ? "border-accent text-text"
+                    : "border-border text-text-muted hover:text-text"
+                }`}
+              >
+                <span
+                  aria-hidden
+                  className="h-2.5 w-2.5 rounded-full"
+                  style={{ background: moodColor(code) }}
+                />
+                {MOODS[code].label}
+              </button>
+            );
+          })}
+        </div>
+
         {error && (
           <p className="text-sm text-text-muted" role="alert">
             {error}
@@ -208,7 +266,10 @@ function CommentItem({
   // Badge "tác giả" = SERVER-TRUTH: user_id của bình luận trùng author của bài.
   const isAuthorReply = comment.userId != null && comment.userId === authorId;
   return (
-    <div>
+    <div
+      className={comment.mood ? "border-l-2 pl-3" : ""}
+      style={comment.mood ? { borderColor: moodColor(comment.mood) } : undefined}
+    >
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <span
           className={
@@ -222,6 +283,16 @@ function CommentItem({
         {isAuthorReply && (
           <span className="rounded-full bg-accent/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-accent">
             tác giả
+          </span>
+        )}
+        {comment.mood && (
+          <span className="inline-flex items-center gap-1 text-xs text-text-muted">
+            <span
+              aria-hidden
+              className="h-2 w-2 rounded-full"
+              style={{ background: moodColor(comment.mood) }}
+            />
+            {MOODS[comment.mood].label}
           </span>
         )}
         <time dateTime={comment.createdAt} className="text-xs text-text-muted">

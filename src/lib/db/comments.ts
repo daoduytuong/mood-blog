@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { MoodCode } from "@/lib/moods";
 
 type DB = SupabaseClient;
 
@@ -10,6 +11,7 @@ export interface Comment {
   userId: string | null; // != null & == post.authorId => badge "tác giả"
   authorName: string;
   body: string;
+  mood: MoodCode | null; // tùy chọn "bài này khiến mình thấy ___" (Lát 3)
   isHidden: boolean;
   createdAt: string;
 }
@@ -21,6 +23,7 @@ interface CommentRow {
   user_id: string | null;
   author_name: string;
   body: string;
+  mood: MoodCode | null;
   is_hidden: boolean;
   created_at: string;
 }
@@ -33,6 +36,7 @@ function toComment(r: CommentRow): Comment {
     userId: r.user_id,
     authorName: r.author_name,
     body: r.body,
+    mood: r.mood,
     isHidden: r.is_hidden,
     createdAt: r.created_at,
   };
@@ -54,6 +58,7 @@ export interface NewComment {
   postId: string;
   body: string;
   authorName: string;
+  mood?: MoodCode | null;
   anonId?: string | null;
   userId?: string | null;
   parentId?: string | null;
@@ -67,6 +72,7 @@ export async function insertComment(sb: DB, input: NewComment): Promise<Comment>
       post_id: input.postId,
       body: input.body,
       author_name: input.authorName,
+      mood: input.mood ?? null,
       anon_id: input.anonId ?? null,
       user_id: input.userId ?? null,
       parent_id: input.parentId ?? null,
