@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Post } from "@/lib/db/posts";
 import { mediaPublicUrl } from "@/lib/storage";
+import { formatPostDate } from "@/lib/date";
 import { ImageBlur } from "@/components/ui/ImageBlur";
 import { MoodBar, MoodLabel } from "./MoodBar";
 import { HeartButton } from "@/features/hearts/HeartButton";
@@ -64,10 +65,14 @@ export function PostCard({
         ) : null)}
 
       <div className="flex flex-col gap-2 p-5 pl-6 pr-10">
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] uppercase tracking-[0.06em] text-text-muted">
-            {isMoment ? "Khoảnh khắc" : "Góc đọc"}
-          </span>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 text-[11px] text-text-muted">
+            <span className="uppercase tracking-[0.06em]">
+              {isMoment ? "Khoảnh khắc" : "Góc đọc"}
+            </span>
+            <span aria-hidden>·</span>
+            <time dateTime={post.createdAt}>{formatPostDate(post.createdAt)}</time>
+          </div>
           <MoodLabel mood={post.mood} />
         </div>
 
