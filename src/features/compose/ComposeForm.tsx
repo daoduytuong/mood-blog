@@ -1,16 +1,24 @@
 "use client";
 
 import { useActionState, useRef, useState, useTransition } from "react";
-import { createMoment, createGocDoc, type ComposeState } from "./actions";
+import {
+  createMoment,
+  createMomentVideo,
+  createGocDoc,
+  type ComposeState,
+} from "./actions";
 import { resizeImage } from "./resize-image";
 import { MOODS, MOOD_CODES, type MoodCode } from "@/lib/moods";
 
 const initial: ComposeState = { error: null };
 type PostType = "khoanh_khac" | "goc_doc";
+type MomentKind = "image" | "video"; // Khoảnh khắc: ảnh hoặc video Vimeo
 
 export function ComposeForm() {
   const [type, setType] = useState<PostType>("khoanh_khac");
+  const [momentKind, setMomentKind] = useState<MomentKind>("image");
   const [momentState, momentAction] = useActionState(createMoment, initial);
+  const [videoState, videoAction] = useActionState(createMomentVideo, initial);
   const [gocDocState, gocDocAction] = useActionState(createGocDoc, initial);
   const [pending, startTransition] = useTransition();
   const [mood, setMood] = useState<MoodCode | "">("");
@@ -19,7 +27,8 @@ export function ComposeForm() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const busy = pending;
-  const error = localError ?? momentState.error ?? gocDocState.error;
+  const error =
+    localError ?? momentState.error ?? videoState.error ?? gocDocState.error;
 
   function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -42,7 +51,15 @@ export function ComposeForm() {
 
     const caption = fieldValue(form, "caption");
 
-    if (type === "khoanh_khac") {
+    if (type === "khoanh_khac" && momentKind === "video") {
+      const videoUrl = fieldValue(form, "videoUrl");
+      if (!videoUrl) return setLocalError("Dán link video Vimeo nhé.");
+      const fd = new FormData();
+      fd.set("caption", caption);
+      fd.set("mood", mood);
+      fd.set("videoUrl", videoUrl);
+      startTransition(() => videoAction(fd));
+    } else if (type === "khoanh_khac") {
       const file = fileRef.current?.files?.[0];
       if (!file) return setLocalError("Thêm một tấm ảnh nhé.");
       let blob: Blob, width: number, height: number, blurDataURL: string;
@@ -100,32 +117,72 @@ export function ComposeForm() {
       </div>
 
       {type === "khoanh_khac" ? (
-        <div>
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            className="block w-full overflow-hidden rounded-lg border border-border bg-surface text-text-muted transition-colors hover:border-accent"
-          >
-            {preview ? (
-              // eslint-disable-next-line @next/next/no-img-element -- preview tạm từ blob URL
-              <img
-                src={preview}
-                alt="Xem trước"
-                className="h-64 w-full object-cover"
+        <div className="flex flex-col gap-4">
+          {/* Ảnh hay video */}
+          <div className="flex gap-1 self-start rounded-full border border-border p-1 text-xs">
+            {(
+              [
+                ["image", "Ảnh"],
+                ["video", "Video"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={momentKind === value}
+                onClick={() => setMomentKind(value)}
+                className={`rounded-full px-3 py-1 transition-colors ${
+                  momentKind === value
+                    ? "bg-accent text-on-accent"
+                    : "text-text-muted hover:text-text"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {momentKind === "image" ? (
+            <div>
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                className="block w-full overflow-hidden rounded-lg border border-border bg-surface text-text-muted transition-colors hover:border-accent"
+              >
+                {preview ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- preview tạm từ blob URL
+                  <img
+                    src={preview}
+                    alt="Xem trước"
+                    className="h-64 w-full object-cover"
+                  />
+                ) : (
+                  <span className="flex h-40 items-center justify-center text-sm">
+                    Chạm để chọn một tấm ảnh
+                  </span>
+                )}
+              </button>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                onChange={onPickFile}
+                className="hidden"
               />
-            ) : (
-              <span className="flex h-40 items-center justify-center text-sm">
-                Chạm để chọn một tấm ảnh
-              </span>
-            )}
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            onChange={onPickFile}
-            className="hidden"
-          />
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <input
+                type="url"
+                name="videoUrl"
+                placeholder="Dán link Vimeo (vd vimeo.com/123456789)"
+                className="rounded-md border border-border bg-surface px-3 py-2 text-text outline-none focus:border-accent"
+              />
+              <p className="text-xs text-text-muted">
+                Chỉ hỗ trợ Vimeo. Video sẽ hiện ảnh tĩnh, chạm mới phát.
+              </p>
+            </div>
+          )}
         </div>
       ) : (
         <div className="flex flex-col gap-4">

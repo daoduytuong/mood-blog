@@ -92,6 +92,15 @@ export async function listSlugs(sb: DB): Promise<string[]> {
   return data.map((r) => r.slug);
 }
 
+/** Đếm bài (head:true -> không trả rows) — query THẬT nhẹ cho keepalive (Story 1.8). */
+export async function countPosts(sb: DB): Promise<number> {
+  const { count, error } = await sb
+    .from("posts")
+    .select("id", { count: "exact", head: true });
+  if (error) throw error;
+  return count ?? 0;
+}
+
 /** Tác giả tạo bài (RLS posts_author_all kiểm auth.uid() = author_id). */
 export async function createPost(sb: DB, input: NewPost): Promise<Post> {
   const { data, error } = await sb

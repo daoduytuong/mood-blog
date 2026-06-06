@@ -11,6 +11,7 @@ import {
 } from "@/lib/db/posts";
 import { slugify } from "./slug";
 import { momentSchema, gocDocSchema } from "./schema";
+import { fetchVimeoMeta } from "./vimeo";
 import { MOOD_CODES, type MoodCode } from "@/lib/moods";
 
 export interface ComposeState {
@@ -91,6 +92,52 @@ export async function createMoment(
   }
 
   // Về Feed: bài mới nằm trên cùng (UJ-1). Trang chi tiết /m/[slug] xây ở Story 2.4.
+  redirect("/");
+}
+
+// Story 1.5b — Khoảnh khắc dạng VIDEO Vimeo. KHÔNG tự host: chỉ lưu provider+id+poster.
+export async function createMomentVideo(
+  _prev: ComposeState,
+  formData: FormData,
+): Promise<ComposeState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Bạn cần đăng nhập đã nhé." };
+
+  const caption = String(formData.get("caption") ?? "").trim();
+  const mood = String(formData.get("mood") ?? "");
+  const videoUrl = String(formData.get("videoUrl") ?? "").trim();
+
+  if (!MOOD_CODES.includes(mood as MoodCode))
+    return { error: "Chọn một tâm trạng giúp mình nhé." };
+  if (!videoUrl) return { error: "Dán link video Vimeo nhé." };
+
+  // oEmbed server-side: validate + lấy poster. Lỗi/private/không tồn tại -> nhắc nhẹ.
+  const meta = await fetchVimeoMeta(videoUrl);
+  if (!meta) return { error: "Link video chưa hợp lệ, kiểm lại nhé." };
+
+  const slug = await uniqueSlug(supabase, caption, "khoanh-khac");
+  try {
+    await createPost(supabase, {
+      authorId: user.id,
+      type: "khoanh_khac",
+      mood: mood as MoodCode,
+      slug,
+      caption: caption || null,
+      media: [
+        {
+          provider: "vimeo",
+          video_id: meta.videoId,
+          poster_url: meta.posterUrl,
+        },
+      ],
+    });
+  } catch {
+    return { error: "Chưa lưu được bài, thử lại nhé." };
+  }
+
   redirect("/");
 }
 
