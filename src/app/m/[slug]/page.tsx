@@ -1,14 +1,59 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { notFound } from "next/navigation";
 import { createPublicClient } from "@/lib/supabase/public";
-import { getBySlug } from "@/lib/db/posts";
+import { getBySlug, listSlugs } from "@/lib/db/posts";
 import { mediaPublicUrl } from "@/lib/storage";
+import { siteUrl } from "@/lib/site";
 import { MoodBar, MoodLabel } from "@/components/post/MoodBar";
 import { HeartButton } from "@/features/hearts/HeartButton";
+import { VideoEmbed } from "@/components/ui/VideoEmbed";
 
-// Chi tiết bài (tối giản — Story 2.4 hoàn thiện: Vimeo poster, OG/metadata, fallback, chuyển trang mềm).
 export const revalidate = 300;
+export const dynamicParams = true; // slug mới (chưa pre-render) -> render on-demand, không 404
+
+// SSG các bài đã có (Next 16: generateStaticParams không chạy lại lúc revalidate).
+export async function generateStaticParams() {
+  const slugs = await listSlugs(createPublicClient());
+  return slugs.map((slug) => ({ slug }));
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const post = await getBySlug(createPublicClient(), slug);
+  if (!post) return {};
+
+  const title =
+    post.caption ||
+    post.excerpt ||
+    (post.type === "khoanh_khac" ? "Một khoảnh khắc" : "Một góc đọc");
+  const description =
+    (post.excerpt || post.caption || "").slice(0, 200) || undefined;
+  const imgPath = post.media[0]?.path;
+  // Khoảnh khắc-ảnh: og:image = ảnh. Góc đọc/video: OG ảnh động để 1 nhịp sau (next/og + font Việt).
+  const images = imgPath ? [mediaPublicUrl(imgPath)] : undefined;
+
+  return {
+    metadataBase: new URL(siteUrl()),
+    title,
+    description,
+    alternates: { canonical: `/m/${slug}` },
+    openGraph: {
+      title,
+      description,
+      type: "article",
+      url: `/m/${slug}`,
+      ...(images ? { images } : {}),
+    },
+    twitter: { card: "summary_large_image", title, description },
+    // Tổng tim KHÔNG bao giờ xuất hiện trong metadata/OG (chỉ /me author thấy).
+  };
+}
 
 export default async function PostDetail({
   params,
@@ -20,7 +65,9 @@ export default async function PostDetail({
   if (!post) notFound();
 
   const isMoment = post.type === "khoanh_khac";
-  const imgPath = post.media[0]?.path;
+  const media = post.media[0];
+  const isVideo = media?.provider === "vimeo" && !!media.video_id;
+  const imgPath = media?.path;
 
   return (
     <main className="mx-auto w-full max-w-container px-4.5 py-8">
@@ -31,18 +78,25 @@ export default async function PostDetail({
       <article className="relative mt-4 overflow-hidden rounded-lg border border-border bg-surface shadow-[0_4px_20px_rgba(62,74,83,0.06)]">
         <MoodBar mood={post.mood} />
 
-        {isMoment && imgPath && (
-          <div className="relative aspect-4/3 w-full bg-background">
-            <Image
-              src={mediaPublicUrl(imgPath)}
-              alt={post.caption ?? "Một khoảnh khắc"}
-              fill
-              sizes="(max-width: 600px) 100vw, 600px"
-              className="object-cover"
-              priority
+        {isMoment &&
+          (isVideo ? (
+            <VideoEmbed
+              videoId={media!.video_id!}
+              poster={media!.poster_url}
+              caption={post.caption ?? undefined}
             />
-          </div>
-        )}
+          ) : imgPath ? (
+            <div className="relative aspect-4/3 w-full bg-background">
+              <Image
+                src={mediaPublicUrl(imgPath)}
+                alt={post.caption ?? "Một khoảnh khắc"}
+                fill
+                sizes="(max-width: 600px) 100vw, 600px"
+                className="object-cover"
+                priority
+              />
+            </div>
+          ) : null)}
 
         <div className="flex flex-col gap-3 p-6 pl-7">
           <MoodLabel mood={post.mood} />
