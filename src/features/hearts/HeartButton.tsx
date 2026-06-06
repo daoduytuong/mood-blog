@@ -2,9 +2,9 @@
 
 import { useHeart } from "./useHeart";
 
-// Tim lặng cho Người xem: KHÔNG hiện số; một chạm để thả; fade ấm (không "bụp").
+// Tim lặng cho Người xem: KHÔNG hiện số; một chạm để thả/gỡ; fade ấm (không "bụp").
 export function HeartButton({ postId }: { postId: string }) {
-  const { liked, like } = useHeart(postId);
+  const { liked, toggle } = useHeart(postId);
 
   return (
     <button
@@ -13,9 +13,9 @@ export function HeartButton({ postId }: { postId: string }) {
         // Trong thẻ Feed có stretched-link phủ lên: chặn nổi bọt để không điều hướng.
         e.preventDefault();
         e.stopPropagation();
-        like();
+        toggle();
       }}
-      aria-label="Thả tim cho bài này"
+      aria-label={liked ? "Gỡ tim" : "Thả tim cho bài này"}
       aria-pressed={liked}
       className="rounded-full p-2 text-accent transition-colors hover:bg-accent/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
     >

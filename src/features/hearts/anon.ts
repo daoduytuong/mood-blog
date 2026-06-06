@@ -31,13 +31,22 @@ export function hasLiked(postId: string): boolean {
   return getLikedSet().has(postId);
 }
 
-export function markLiked(postId: string): void {
+function setLiked(postId: string, liked: boolean): void {
   if (typeof window === "undefined") return;
   try {
     const s = getLikedSet();
-    s.add(postId);
+    if (liked) s.add(postId);
+    else s.delete(postId);
     localStorage.setItem(LIKED_KEY, JSON.stringify([...s]));
   } catch {
     /* localStorage không khả dụng -> bỏ qua (chấp nhận) */
   }
+}
+
+export function markLiked(postId: string): void {
+  setLiked(postId, true);
+}
+
+export function unmarkLiked(postId: string): void {
+  setLiked(postId, false);
 }
