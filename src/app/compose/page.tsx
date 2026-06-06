@@ -17,11 +17,10 @@ export default async function ComposePage() {
         className="mb-1 text-2xl font-medium text-text"
         style={{ fontFamily: "var(--font-serif)" }}
       >
-        Một khoảnh khắc
+        Ghi lại một điều
       </h1>
       <p className="mb-8 text-sm text-text-muted">
-        Lưu lại một tấm ảnh kèm tâm trạng của nó.
-        {/* "Góc đọc" sẽ thêm ở Story 1.6 */}
+        Một khoảnh khắc của bạn, hoặc một điều hay bạn muốn giữ lại.
       </p>
       <ComposeForm />
     </main>
