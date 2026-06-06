@@ -3,9 +3,14 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { listByAuthor } from "@/lib/db/posts";
 import { countsForAuthor } from "@/lib/db/hearts";
+import { listRecentCommentsForPosts } from "@/lib/db/comments";
 import { signOut } from "@/features/auth/actions";
 import { MoodLabel } from "@/components/post/MoodBar";
 import { HeartIcon } from "@/components/ui/HeartIcon";
+import {
+  CommentInbox,
+  type InboxPost,
+} from "@/features/comments/CommentInbox";
 
 // Author-only, dynamic (đọc session + tổng tim author-only, KHÔNG cache).
 export const dynamic = "force-dynamic";
@@ -17,10 +22,29 @@ export default async function MePage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login?returnTo=/me"); // double-check ngoài proxy guard
 
-  const [posts, counts] = await Promise.all([
-    listByAuthor(supabase, user.id),
+  const posts = await listByAuthor(supabase, user.id);
+  const [counts, recent] = await Promise.all([
     countsForAuthor(supabase),
+    listRecentCommentsForPosts(
+      supabase,
+      posts.map((p) => p.id),
+    ),
   ]);
+
+  // Hộp thư: chỉ lời người xem (bỏ trả lời của chính tác giả) + map tiêu đề bài.
+  const inboxComments = recent.filter((c) => c.userId === null);
+  const postMap: Record<string, InboxPost> = Object.fromEntries(
+    posts.map((p) => [
+      p.id,
+      {
+        slug: p.slug,
+        title:
+          p.caption ||
+          p.excerpt ||
+          (p.type === "khoanh_khac" ? "Một khoảnh khắc" : "Một góc đọc"),
+      },
+    ]),
+  );
 
   return (
     <main className="mx-auto min-h-dvh w-full max-w-container px-4.5 py-12">
@@ -83,6 +107,17 @@ export default async function MePage() {
           })}
         </ul>
       )}
+
+      {/* Hộp thư — lời người xem gửi tới (chấm báo "mới" + ẩn/xoá). */}
+      <section className="mt-14">
+        <h2
+          className="mb-4 text-lg font-medium text-text"
+          style={{ fontFamily: "var(--font-serif)" }}
+        >
+          Hộp thư
+        </h2>
+        <CommentInbox initial={inboxComments} posts={postMap} />
+      </section>
     </main>
   );
 }

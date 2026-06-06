@@ -82,3 +82,36 @@ export async function insertComment(sb: DB, input: NewComment): Promise<Comment>
   if (error || !data) throw error ?? new Error("insertComment failed");
   return toComment(data as CommentRow);
 }
+
+/** Tác giả ẩn một bình luận (gỡ khỏi công khai, giữ hàng). RLS chỉ cho author của bài. */
+export async function hideComment(sb: DB, id: string): Promise<void> {
+  const { error } = await sb
+    .from("comments")
+    .update({ is_hidden: true })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+/** Tác giả xoá hẳn một bình luận (cascade trả lời theo FK). */
+export async function deleteComment(sb: DB, id: string): Promise<void> {
+  const { error } = await sb.from("comments").delete().eq("id", id);
+  if (error) throw error;
+}
+
+/** Hộp thư tác giả: bình luận mới nhất trên các bài đã cho. Defensive: lỗi -> []. */
+export async function listRecentCommentsForPosts(
+  sb: DB,
+  postIds: string[],
+  limit = 50,
+): Promise<Comment[]> {
+  if (postIds.length === 0) return [];
+  const { data, error } = await sb
+    .from("comments")
+    .select("*")
+    .in("post_id", postIds)
+    .eq("is_hidden", false)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error || !data) return [];
+  return (data as CommentRow[]).map(toComment);
+}

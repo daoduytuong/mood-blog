@@ -2,11 +2,24 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { listComments, insertComment, type Comment } from "@/lib/db/comments";
+import {
+  listComments,
+  insertComment,
+  hideComment,
+  deleteComment,
+  type Comment,
+} from "@/lib/db/comments";
 import { formatPostDate } from "@/lib/date";
 import { MOODS, MOOD_CODES, moodColor, type MoodCode } from "@/lib/moods";
 import { commentSchema, replyBodySchema } from "./schema";
-import { getAnonId, getCommenterName, setCommenterName } from "./identity";
+import {
+  getAnonId,
+  getCommenterName,
+  setCommenterName,
+  lastCommentAt,
+  markCommented,
+  COMMENT_THROTTLE_MS,
+} from "./identity";
 
 // Lớp bình luận công khai (Phase-2 Lát 1). Người xem nhập tên (localStorage) -> đăng ngay;
 // CHỈ tác giả (đăng nhập) trả lời 1 tầng (mô hình "chủ nhà"). Badge "tác giả" suy từ user_id.
@@ -24,6 +37,7 @@ export function CommentSection({
   const [name, setName] = useState("");
   const [body, setBody] = useState("");
   const [mood, setMood] = useState<MoodCode | null>(null); // tùy chọn
+  const [hp, setHp] = useState(""); // honeypot — người thật để trống
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [replyTo, setReplyTo] = useState<string | null>(null);
@@ -56,6 +70,16 @@ export function CommentSection({
   async function submitTop(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    // Honeypot: chỉ bot điền -> giả vờ xong, không chèn gì (im lặng).
+    if (hp) {
+      setBody("");
+      setMood(null);
+      return;
+    }
+    // Throttle nhẹ chống flood.
+    if (Date.now() - lastCommentAt() < COMMENT_THROTTLE_MS) {
+      return setError("Từ từ chút nhé — đợi một lát rồi gửi tiếp.");
+    }
     const parsed = commentSchema.safeParse({ authorName: name, body });
     if (!parsed.success) {
       return setError(parsed.error.issues[0]?.message ?? "Có gì đó chưa ổn.");
@@ -70,6 +94,7 @@ export function CommentSection({
         anonId: getAnonId(),
       });
       setCommenterName(parsed.data.authorName);
+      markCommented();
       setComments((cs) => [...cs, created]);
       setBody("");
       setMood(null);
@@ -77,6 +102,19 @@ export function CommentSection({
       setError("Chưa gửi được, thử lại nhé.");
     } finally {
       setPending(false);
+    }
+  }
+
+  // Chủ nhà ẩn/xoá một bình luận (RLS chỉ cho author của bài).
+  async function moderate(id: string, action: "hide" | "delete") {
+    const sb = createClient();
+    try {
+      if (action === "hide") await hideComment(sb, id);
+      else await deleteComment(sb, id);
+      // Gỡ khỏi danh sách (kể cả trả lời con nếu xoá gốc).
+      setComments((cs) => cs.filter((c) => c.id !== id && c.parentId !== id));
+    } catch {
+      /* im lặng */
     }
   }
 
@@ -135,14 +173,24 @@ export function CommentSection({
         <ul className="flex flex-col gap-6">
           {roots.map((c) => (
             <li key={c.id}>
-              <CommentItem comment={c} authorId={authorId} />
+              <CommentItem
+                comment={c}
+                authorId={authorId}
+                canModerate={isAuthor}
+                onModerate={moderate}
+              />
 
               {repliesOf(c.id).map((r) => (
                 <div
                   key={r.id}
                   className="ml-4 mt-3 border-l-2 border-border pl-4"
                 >
-                  <CommentItem comment={r} authorId={authorId} />
+                  <CommentItem
+                    comment={r}
+                    authorId={authorId}
+                    canModerate={isAuthor}
+                    onModerate={moderate}
+                  />
                 </div>
               ))}
 
@@ -192,6 +240,17 @@ export function CommentSection({
 
       {/* Form để lại đôi lời */}
       <form onSubmit={submitTop} className="mt-8 flex flex-col gap-3">
+        {/* Honeypot: ẩn với người thật; chỉ bot điền -> bị bỏ qua. */}
+        <input
+          type="text"
+          name="website"
+          tabIndex={-1}
+          autoComplete="off"
+          aria-hidden
+          value={hp}
+          onChange={(e) => setHp(e.target.value)}
+          style={{ position: "absolute", left: "-9999px", width: 1, height: 1, opacity: 0 }}
+        />
         <input
           type="text"
           value={name}
@@ -259,9 +318,13 @@ export function CommentSection({
 function CommentItem({
   comment,
   authorId,
+  canModerate = false,
+  onModerate,
 }: {
   comment: Comment;
   authorId: string;
+  canModerate?: boolean;
+  onModerate?: (id: string, action: "hide" | "delete") => void;
 }) {
   // Badge "tác giả" = SERVER-TRUTH: user_id của bình luận trùng author của bài.
   const isAuthorReply = comment.userId != null && comment.userId === authorId;
@@ -302,6 +365,24 @@ function CommentItem({
       <p className="mt-1 whitespace-pre-wrap font-serif leading-relaxed text-text">
         {comment.body}
       </p>
+      {canModerate && onModerate && (
+        <div className="mt-1.5 flex items-center gap-3 text-xs text-text-muted">
+          <button
+            type="button"
+            onClick={() => onModerate(comment.id, "hide")}
+            className="hover:text-text"
+          >
+            Ẩn
+          </button>
+          <button
+            type="button"
+            onClick={() => onModerate(comment.id, "delete")}
+            className="underline-offset-2 hover:text-text hover:underline"
+          >
+            Xoá
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -22,4 +22,27 @@ export function setCommenterName(name: string): void {
   }
 }
 
+// Throttle nhẹ (best-effort, $0): chặn flood gửi liên tiếp. Bypass được khi xoá localStorage
+// nhưng đủ tốt cho hobby + đi kèm honeypot. Lát 2.
+const LAST_KEY = "mb_last_comment";
+export const COMMENT_THROTTLE_MS = 30_000;
+
+export function lastCommentAt(): number {
+  if (typeof window === "undefined") return 0;
+  try {
+    return Number(localStorage.getItem(LAST_KEY) ?? 0);
+  } catch {
+    return 0;
+  }
+}
+
+export function markCommented(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(LAST_KEY, String(Date.now()));
+  } catch {
+    /* bỏ qua */
+  }
+}
+
 export { getAnonId };
