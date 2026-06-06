@@ -28,7 +28,7 @@ export function PostAuthorActions({
   if (!authed) return null;
 
   return (
-    <div className="mt-6 flex items-center gap-4 border-t border-border pt-4 text-sm">
+    <div className="flex items-center gap-4 border-t border-border pt-4 text-sm">
       <Link
         href={`/m/${slug}/edit`}
         className="text-text-muted hover:text-text"

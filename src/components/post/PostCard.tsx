@@ -11,7 +11,7 @@ export function PostCard({ post }: { post: Post }) {
   const imgPath = media?.path;
 
   return (
-    <article className="group relative overflow-hidden rounded-lg border border-border bg-surface shadow-[0_4px_20px_rgba(62,74,83,0.06)] transition-all hover:-translate-y-0.5 hover:shadow-[0_8px_28px_rgba(62,74,83,0.10)] focus-within:ring-2 focus-within:ring-accent">
+    <article className="group relative overflow-hidden rounded-lg border border-border bg-surface shadow-[0_4px_20px_rgba(62,74,83,0.06)] transition-colors hover:border-accent focus-within:ring-2 focus-within:ring-accent">
       <MoodBar mood={post.mood} />
 
       {isMoment && imgPath && (

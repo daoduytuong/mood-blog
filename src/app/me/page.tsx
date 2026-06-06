@@ -5,6 +5,7 @@ import { listByAuthor } from "@/lib/db/posts";
 import { countsForAuthor } from "@/lib/db/hearts";
 import { signOut } from "@/features/auth/actions";
 import { MoodLabel } from "@/components/post/MoodBar";
+import { HeartIcon } from "@/components/ui/HeartIcon";
 
 // Author-only, dynamic (đọc session + tổng tim author-only, KHÔNG cache).
 export const dynamic = "force-dynamic";
@@ -74,16 +75,7 @@ export default async function MePage() {
                 <MoodLabel mood={post.mood} />
                 {/* Tổng tim — CHỈ Tác giả thấy */}
                 <span className="inline-flex items-center gap-1 text-sm text-text-muted">
-                  <svg
-                    viewBox="0 0 24 24"
-                    width="16"
-                    height="16"
-                    aria-hidden
-                    fill="currentColor"
-                    fillOpacity={0.5}
-                  >
-                    <path d="M12 20s-7-4.4-9.2-8.4C1.3 8.4 3 5.5 6 5.5c1.8 0 3 1 4 2.3 1-1.3 2.2-2.3 4-2.3 3 0 4.7 2.9 3.2 6.1C19 15.6 12 20 12 20Z" />
-                  </svg>
+                  <HeartIcon size={16} fillOpacity={0.5} strokeWidth={1.5} />
                   {total}
                 </span>
               </li>
