@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import Image from "next/image";
 import { notFound } from "next/navigation";
 import { createPublicClient } from "@/lib/supabase/public";
 import { getBySlug, listSlugs } from "@/lib/db/posts";
 import { mediaPublicUrl } from "@/lib/storage";
 import { siteUrl } from "@/lib/site";
+import { ImageBlur } from "@/components/ui/ImageBlur";
 import { MoodBar, MoodLabel } from "@/components/post/MoodBar";
 import { PostAuthorActions } from "@/components/post/PostAuthorActions";
 import { HeartButton } from "@/features/hearts/HeartButton";
@@ -87,16 +87,13 @@ export default async function PostDetail({
               caption={post.caption ?? undefined}
             />
           ) : imgPath ? (
-            <div className="relative aspect-4/3 w-full bg-background">
-              <Image
-                src={mediaPublicUrl(imgPath)}
-                alt={post.caption ?? "Một khoảnh khắc"}
-                fill
-                sizes="(max-width: 600px) 100vw, 600px"
-                className="object-cover"
-                priority
-              />
-            </div>
+            <ImageBlur
+              src={mediaPublicUrl(imgPath)}
+              alt={post.caption ?? "Một khoảnh khắc"}
+              sizes="(max-width: 600px) 100vw, 600px"
+              blurDataURL={media?.blurDataURL}
+              priority
+            />
           ) : null)}
 
         <div className="flex flex-col gap-3 p-6 pl-7">

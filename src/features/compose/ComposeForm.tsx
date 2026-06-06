@@ -45,9 +45,9 @@ export function ComposeForm() {
     if (type === "khoanh_khac") {
       const file = fileRef.current?.files?.[0];
       if (!file) return setLocalError("Thêm một tấm ảnh nhé.");
-      let blob: Blob;
+      let blob: Blob, width: number, height: number, blurDataURL: string;
       try {
-        ({ blob } = await resizeImage(file));
+        ({ blob, width, height, blurDataURL } = await resizeImage(file));
       } catch {
         return setLocalError("Ảnh này mình chưa xử lý được, thử ảnh khác nhé.");
       }
@@ -55,6 +55,9 @@ export function ComposeForm() {
       fd.set("caption", caption);
       fd.set("mood", mood);
       fd.set("image", blob, "khoanh-khac.webp");
+      fd.set("width", String(width));
+      fd.set("height", String(height));
+      fd.set("blurDataURL", blurDataURL);
       startTransition(() => momentAction(fd));
     } else {
       const linkUrl = fieldValue(form, "linkUrl");

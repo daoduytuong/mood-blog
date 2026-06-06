@@ -5,11 +5,12 @@ import type { MoodCode } from "@/lib/moods";
 export type PostType = "khoanh_khac" | "goc_doc";
 
 export interface MediaItem {
-  // Khoảnh khắc-ảnh: { path, w, h, blurhash? }
+  // Khoảnh khắc-ảnh: { path, w, h, blurDataURL? }
   path?: string;
   w?: number;
   h?: number;
   blurhash?: string;
+  blurDataURL?: string; // preview ~16px (data URL) cho blur-up next/image
   // Khoảnh khắc-video: { provider:'vimeo', video_id, poster_url }
   provider?: "vimeo";
   video_id?: string;

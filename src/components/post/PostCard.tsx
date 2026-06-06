@@ -1,28 +1,26 @@
 import Link from "next/link";
-import Image from "next/image";
 import type { Post } from "@/lib/db/posts";
 import { mediaPublicUrl } from "@/lib/storage";
+import { ImageBlur } from "@/components/ui/ImageBlur";
 import { MoodBar, MoodLabel } from "./MoodBar";
 import { HeartButton } from "@/features/hearts/HeartButton";
 
 export function PostCard({ post }: { post: Post }) {
   const isMoment = post.type === "khoanh_khac";
-  const imgPath = post.media[0]?.path;
+  const media = post.media[0];
+  const imgPath = media?.path;
 
   return (
     <article className="group relative overflow-hidden rounded-lg border border-border bg-surface shadow-[0_4px_20px_rgba(62,74,83,0.06)] transition-all hover:-translate-y-0.5 hover:shadow-[0_8px_28px_rgba(62,74,83,0.10)] focus-within:ring-2 focus-within:ring-accent">
       <MoodBar mood={post.mood} />
 
       {isMoment && imgPath && (
-        <div className="relative aspect-4/3 w-full bg-background">
-          <Image
-            src={mediaPublicUrl(imgPath)}
-            alt={post.caption ?? "Một khoảnh khắc"}
-            fill
-            sizes="(max-width: 600px) 100vw, 600px"
-            className="object-cover"
-          />
-        </div>
+        <ImageBlur
+          src={mediaPublicUrl(imgPath)}
+          alt={post.caption ?? "Một khoảnh khắc"}
+          sizes="(max-width: 600px) 100vw, 600px"
+          blurDataURL={media?.blurDataURL}
+        />
       )}
 
       <div className="flex flex-col gap-2 p-5 pl-6">

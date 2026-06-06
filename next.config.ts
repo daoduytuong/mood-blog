@@ -16,6 +16,11 @@ const nextConfig: NextConfig = {
         pathname: "/storage/v1/object/public/**",
       },
     ],
+    // Feed/chi tiết rộng tối đa 600px -> giới hạn breakpoint để KHÔNG sinh quá nhiều
+    // biến thể (Vercel Hobby chỉ 5K image transforms/tháng). Chỉ phục vụ webp.
+    deviceSizes: [640, 828, 1200],
+    imageSizes: [320, 600],
+    formats: ["image/webp"],
   },
   experimental: {
     // Ảnh đã resize phía client (≤2048px webp) nên nhỏ; nâng limit cho an toàn (mặc định 1MB).

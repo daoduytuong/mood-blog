@@ -42,6 +42,14 @@ export async function createMoment(
   const caption = String(formData.get("caption") ?? "").trim();
   const mood = String(formData.get("mood") ?? "");
   const file = formData.get("image");
+  // Kích thước + blur preview (blur-up chống CLS — Story 2.3). Cap blurDataURL phòng rác.
+  const width = Number(formData.get("width")) || undefined;
+  const height = Number(formData.get("height")) || undefined;
+  const rawBlur = String(formData.get("blurDataURL") ?? "");
+  const blurDataURL =
+    rawBlur.startsWith("data:image/") && rawBlur.length < 4000
+      ? rawBlur
+      : undefined;
 
   const parsed = momentSchema.safeParse({
     caption: caption || undefined,
@@ -75,7 +83,7 @@ export async function createMoment(
       mood: parsed.data.mood as MoodCode,
       slug,
       caption: caption || null,
-      media: [{ path }],
+      media: [{ path, w: width, h: height, blurDataURL }],
     });
   } catch {
     await supabase.storage.from("media").remove([path]);
