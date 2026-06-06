@@ -6,7 +6,7 @@ import { getBySlug, listSlugs } from "@/lib/db/posts";
 import { listComments } from "@/lib/db/comments";
 import { mediaPublicUrl } from "@/lib/storage";
 import { siteUrl } from "@/lib/site";
-import { ImageBlur } from "@/components/ui/ImageBlur";
+import { Lightbox } from "@/components/ui/Lightbox";
 import { MoodBar, MoodLabel } from "@/components/post/MoodBar";
 import { PostAuthorActions } from "@/components/post/PostAuthorActions";
 import { ShareButton } from "@/components/post/ShareButton";
@@ -75,6 +75,8 @@ export default async function PostDetail({
   const media = post.media[0];
   const isVideo = media?.provider === "vimeo" && !!media.video_id;
   const imgPath = media?.path;
+  // Tỉ lệ ảnh THẬT ở chi tiết (kẹp trần 4:5 cho ảnh quá cao); thiếu w/h -> fallback 4/3.
+  const ratio = media?.w && media?.h ? Math.max(media.w / media.h, 0.8) : undefined;
 
   return (
     <main className="mx-auto w-full max-w-container px-4.5 py-8">
@@ -94,11 +96,12 @@ export default async function PostDetail({
               autoPlay
             />
           ) : imgPath ? (
-            <ImageBlur
+            <Lightbox
               src={mediaPublicUrl(imgPath)}
               alt={post.caption ?? "Một khoảnh khắc"}
               sizes="(max-width: 600px) 100vw, 600px"
               blurDataURL={media?.blurDataURL}
+              ratio={ratio}
               priority
             />
           ) : null)}

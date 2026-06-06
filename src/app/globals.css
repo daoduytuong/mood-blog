@@ -56,3 +56,13 @@ html {
 ::selection {
   background-color: color-mix(in oklab, var(--color-accent) 28%, transparent);
 }
+
+/* Fade tĩnh cho overlay lightbox (gác sau motion-safe ở nơi dùng). */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

@@ -7,6 +7,8 @@ export interface ImageBlurProps {
   blurDataURL?: string;
   /** Tailwind aspect class — khung cố định chống CLS (mặc định 4/3). */
   aspect?: string;
+  /** Tỉ lệ ảnh THẬT (w/h) — nếu có, dùng aspect-ratio inline thay class (vd trang chi tiết). */
+  ratio?: number;
   priority?: boolean;
 }
 
@@ -18,10 +20,14 @@ export function ImageBlur({
   sizes,
   blurDataURL,
   aspect = "aspect-4/3",
+  ratio,
   priority = false,
 }: ImageBlurProps) {
   return (
-    <div className={`relative w-full overflow-hidden bg-border/40 ${aspect}`}>
+    <div
+      className={`relative w-full overflow-hidden bg-border/40 ${ratio ? "" : aspect}`}
+      style={ratio ? { aspectRatio: String(ratio) } : undefined}
+    >
       <Image
         src={src}
         alt={alt}
