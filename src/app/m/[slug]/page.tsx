@@ -9,6 +9,7 @@ import { siteUrl } from "@/lib/site";
 import { ImageBlur } from "@/components/ui/ImageBlur";
 import { MoodBar, MoodLabel } from "@/components/post/MoodBar";
 import { PostAuthorActions } from "@/components/post/PostAuthorActions";
+import { ShareButton } from "@/components/post/ShareButton";
 import { HeartButton } from "@/features/hearts/HeartButton";
 import { VideoEmbed } from "@/components/ui/VideoEmbed";
 import { CommentSection } from "@/features/comments/CommentSection";
@@ -138,8 +139,12 @@ export default async function PostDetail({
             </>
           )}
 
-          <div className="pt-2">
+          <div className="flex items-center gap-1 pt-2">
             <HeartButton postId={post.id} />
+            <ShareButton
+              slug={post.slug}
+              title={post.caption ?? post.excerpt ?? undefined}
+            />
           </div>
 
           <PostAuthorActions postId={post.id} slug={post.slug} />
