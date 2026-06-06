@@ -45,3 +45,14 @@ body {
   color: var(--color-text);
   font-family: var(--font-sans), system-ui, sans-serif;
 }
+
+/* Bo trải nghiệm tới mép (craft IG/app gốc): bỏ flash chạm, không lộ nền trắng khi kéo biên. */
+html {
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+/* Bôi đen chữ mang sắc accent thay vì xanh hệ thống. */
+::selection {
+  background-color: color-mix(in oklab, var(--color-accent) 28%, transparent);
+}

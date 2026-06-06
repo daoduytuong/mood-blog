@@ -39,15 +39,14 @@ export default function RootLayout({
       className={`${lora.variable} ${inter.variable} h-full antialiased`}
     >
       <body className="min-h-full">
-        <header className="mx-auto flex w-full max-w-container items-center justify-between px-4.5 py-4">
-          <Link
-            href="/"
-            className="text-text"
-            style={{ fontFamily: "var(--font-serif)" }}
-          >
-            khoảnh khắc của tôi
-          </Link>
-          <AuthorNav />
+        {/* Header dính + kính mờ: luôn có lối về, không che nội dung (light-only). */}
+        <header className="sticky top-0 z-40 border-b border-border bg-background/75 backdrop-blur-sm">
+          <div className="mx-auto flex w-full max-w-container items-center justify-between px-4.5 py-4">
+            <Link href="/" className="font-serif text-text">
+              khoảnh khắc của tôi
+            </Link>
+            <AuthorNav />
+          </div>
         </header>
         {children}
       </body>
