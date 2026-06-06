@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createPublicClient } from "@/lib/supabase/public";
 import { getBySlug, listSlugs } from "@/lib/db/posts";
+import { listComments } from "@/lib/db/comments";
 import { mediaPublicUrl } from "@/lib/storage";
 import { siteUrl } from "@/lib/site";
 import { ImageBlur } from "@/components/ui/ImageBlur";
@@ -10,6 +11,7 @@ import { MoodBar, MoodLabel } from "@/components/post/MoodBar";
 import { PostAuthorActions } from "@/components/post/PostAuthorActions";
 import { HeartButton } from "@/features/hearts/HeartButton";
 import { VideoEmbed } from "@/components/ui/VideoEmbed";
+import { CommentSection } from "@/features/comments/CommentSection";
 
 export const revalidate = 300;
 export const dynamicParams = true; // slug mới (chưa pre-render) -> render on-demand, không 404
@@ -64,6 +66,9 @@ export default async function PostDetail({
   const { slug } = await params; // Next 16: params async
   const post = await getBySlug(createPublicClient(), slug);
   if (!post) notFound();
+
+  // Bình luận: nạp sẵn lúc render (SSR/ISR) — island sẽ refetch để tươi.
+  const initialComments = await listComments(createPublicClient(), post.id);
 
   const isMoment = post.type === "khoanh_khac";
   const media = post.media[0];
@@ -140,6 +145,12 @@ export default async function PostDetail({
           <PostAuthorActions postId={post.id} slug={post.slug} />
         </div>
       </article>
+
+      <CommentSection
+        postId={post.id}
+        authorId={post.authorId}
+        initialComments={initialComments}
+      />
     </main>
   );
 }
