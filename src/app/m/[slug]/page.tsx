@@ -5,6 +5,7 @@ import { createPublicClient } from "@/lib/supabase/public";
 import { getBySlug } from "@/lib/db/posts";
 import { mediaPublicUrl } from "@/lib/storage";
 import { MoodBar, MoodLabel } from "@/components/post/MoodBar";
+import { HeartButton } from "@/features/hearts/HeartButton";
 
 // Chi tiết bài (tối giản — Story 2.4 hoàn thiện: Vimeo poster, OG/metadata, fallback, chuyển trang mềm).
 export const revalidate = 300;
@@ -31,7 +32,7 @@ export default async function PostDetail({
         <MoodBar mood={post.mood} />
 
         {isMoment && imgPath && (
-          <div className="relative aspect-[4/3] w-full bg-background">
+          <div className="relative aspect-4/3 w-full bg-background">
             <Image
               src={mediaPublicUrl(imgPath)}
               alt={post.caption ?? "Một khoảnh khắc"}
@@ -78,6 +79,10 @@ export default async function PostDetail({
               )}
             </>
           )}
+
+          <div className="pt-2">
+            <HeartButton postId={post.id} />
+          </div>
         </div>
       </article>
     </main>

@@ -5,6 +5,8 @@ const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL
   : "*.supabase.co";
 
 const nextConfig: NextConfig = {
+  // Ghim workspace root vào thư mục dự án (tránh Turbopack suy luận nhầm sang thư mục cha).
+  turbopack: { root: process.cwd() },
   images: {
     // Next 16: dùng remotePatterns (images.domains đã deprecated). Ảnh phục vụ từ Supabase Storage.
     remotePatterns: [

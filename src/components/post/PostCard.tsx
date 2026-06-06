@@ -3,20 +3,18 @@ import Image from "next/image";
 import type { Post } from "@/lib/db/posts";
 import { mediaPublicUrl } from "@/lib/storage";
 import { MoodBar, MoodLabel } from "./MoodBar";
+import { HeartButton } from "@/features/hearts/HeartButton";
 
 export function PostCard({ post }: { post: Post }) {
   const isMoment = post.type === "khoanh_khac";
   const imgPath = post.media[0]?.path;
 
   return (
-    <Link
-      href={`/m/${post.slug}`}
-      className="group relative block overflow-hidden rounded-lg border border-border bg-surface shadow-[0_4px_20px_rgba(62,74,83,0.06)] transition-all hover:-translate-y-0.5 hover:shadow-[0_8px_28px_rgba(62,74,83,0.10)] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-    >
+    <article className="group relative overflow-hidden rounded-lg border border-border bg-surface shadow-[0_4px_20px_rgba(62,74,83,0.06)] transition-all hover:-translate-y-0.5 hover:shadow-[0_8px_28px_rgba(62,74,83,0.10)] focus-within:ring-2 focus-within:ring-accent">
       <MoodBar mood={post.mood} />
 
       {isMoment && imgPath && (
-        <div className="relative aspect-[4/3] w-full bg-background">
+        <div className="relative aspect-4/3 w-full bg-background">
           <Image
             src={mediaPublicUrl(imgPath)}
             alt={post.caption ?? "Một khoảnh khắc"}
@@ -59,7 +57,22 @@ export function PostCard({ post }: { post: Post }) {
                 )}
               </>
             )}
+
+        {/* chừa chỗ cho nút tim ở góc dưới-phải */}
+        <div className="h-2" />
       </div>
-    </Link>
+
+      {/* Stretched link: bấm cả thẻ -> chi tiết. Đặt DƯỚI các control tương tác. */}
+      <Link
+        href={`/m/${post.slug}`}
+        aria-label={`Mở: ${post.caption ?? "bài đăng"}`}
+        className="absolute inset-0 focus:outline-none"
+      />
+
+      {/* Tim lặng nổi trên stretched-link (z-10) -> không kích hoạt điều hướng. */}
+      <div className="absolute bottom-3 right-3 z-10">
+        <HeartButton postId={post.id} />
+      </div>
+    </article>
   );
 }
