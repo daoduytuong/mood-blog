@@ -1,13 +1,15 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+
+export const metadata: Metadata = {
+  title: "Trang này không còn ở đây",
+};
 
 // 404 tử tế theo giọng "Lặng mát" (slug sai/bài đã xoá rơi vào đây).
 export default function NotFound() {
   return (
     <main className="mx-auto flex min-h-[60vh] w-full max-w-container flex-col items-center justify-center gap-5 px-4.5 text-center">
-      <p
-        className="text-lg text-text"
-        style={{ fontFamily: "var(--font-serif)" }}
-      >
+      <p className="font-serif text-lg text-text">
         Trang này không còn ở đây nữa.
       </p>
       <Link

@@ -32,6 +32,10 @@
   --radius-md: 0.75rem;
   --radius-lg: 1rem;
 
+  /* Bóng đổ (tĩnh — KHÔNG bóng-nở khi hover) */
+  --shadow-card: 0 4px 20px rgba(62, 74, 83, 0.06);
+  --shadow-soft: 0 4px 20px rgba(62, 74, 83, 0.12);
+
   /* Bố cục */
   --spacing-container: 600px; /* chiều rộng tối đa một cột */
 }
@@ -40,4 +44,25 @@ body {
   background: var(--color-background);
   color: var(--color-text);
   font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* Bo trải nghiệm tới mép (craft IG/app gốc): bỏ flash chạm, không lộ nền trắng khi kéo biên. */
+html {
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+/* Bôi đen chữ mang sắc accent thay vì xanh hệ thống. */
+::selection {
+  background-color: color-mix(in oklab, var(--color-accent) 28%, transparent);
+}
+
+/* Fade tĩnh cho overlay lightbox (gác sau motion-safe ở nơi dùng). */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }

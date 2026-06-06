@@ -3,13 +3,16 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createPublicClient } from "@/lib/supabase/public";
 import { getBySlug, listSlugs } from "@/lib/db/posts";
+import { listComments } from "@/lib/db/comments";
 import { mediaPublicUrl } from "@/lib/storage";
 import { siteUrl } from "@/lib/site";
-import { ImageBlur } from "@/components/ui/ImageBlur";
+import { Lightbox } from "@/components/ui/Lightbox";
 import { MoodBar, MoodLabel } from "@/components/post/MoodBar";
 import { PostAuthorActions } from "@/components/post/PostAuthorActions";
+import { ShareButton } from "@/components/post/ShareButton";
 import { HeartButton } from "@/features/hearts/HeartButton";
 import { VideoEmbed } from "@/components/ui/VideoEmbed";
+import { CommentSection } from "@/features/comments/CommentSection";
 
 export const revalidate = 300;
 export const dynamicParams = true; // slug mới (chưa pre-render) -> render on-demand, không 404
@@ -65,10 +68,15 @@ export default async function PostDetail({
   const post = await getBySlug(createPublicClient(), slug);
   if (!post) notFound();
 
+  // Bình luận: nạp sẵn lúc render (SSR/ISR) — island sẽ refetch để tươi.
+  const initialComments = await listComments(createPublicClient(), post.id);
+
   const isMoment = post.type === "khoanh_khac";
   const media = post.media[0];
   const isVideo = media?.provider === "vimeo" && !!media.video_id;
   const imgPath = media?.path;
+  // Tỉ lệ ảnh THẬT ở chi tiết (kẹp trần 4:5 cho ảnh quá cao); thiếu w/h -> fallback 4/3.
+  const ratio = media?.w && media?.h ? Math.max(media.w / media.h, 0.8) : undefined;
 
   return (
     <main className="mx-auto w-full max-w-container px-4.5 py-8">
@@ -85,13 +93,15 @@ export default async function PostDetail({
               videoId={media!.video_id!}
               poster={media!.poster_url}
               caption={post.caption ?? undefined}
+              autoPlay
             />
           ) : imgPath ? (
-            <ImageBlur
+            <Lightbox
               src={mediaPublicUrl(imgPath)}
               alt={post.caption ?? "Một khoảnh khắc"}
               sizes="(max-width: 600px) 100vw, 600px"
               blurDataURL={media?.blurDataURL}
+              ratio={ratio}
               priority
             />
           ) : null)}
@@ -132,13 +142,23 @@ export default async function PostDetail({
             </>
           )}
 
-          <div className="pt-2">
+          <div className="flex items-center gap-1 pt-2">
             <HeartButton postId={post.id} />
+            <ShareButton
+              slug={post.slug}
+              title={post.caption ?? post.excerpt ?? undefined}
+            />
           </div>
 
           <PostAuthorActions postId={post.id} slug={post.slug} />
         </div>
       </article>
+
+      <CommentSection
+        postId={post.id}
+        authorId={post.authorId}
+        initialComments={initialComments}
+      />
     </main>
   );
 }

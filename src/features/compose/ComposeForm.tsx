@@ -1,6 +1,12 @@
 "use client";
 
-import { useActionState, useRef, useState, useTransition } from "react";
+import {
+  useActionState,
+  useEffect,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import {
   createMoment,
   createMomentVideo,
@@ -29,6 +35,13 @@ export function ComposeForm() {
   const busy = pending;
   const error =
     localError ?? momentState.error ?? videoState.error ?? gocDocState.error;
+
+  // Thu hồi blob URL preview (tránh rò bộ nhớ): revoke khi đổi ảnh / rời form.
+  useEffect(() => {
+    return () => {
+      if (preview) URL.revokeObjectURL(preview);
+    };
+  }, [preview]);
 
   function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];

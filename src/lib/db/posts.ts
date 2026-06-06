@@ -59,6 +59,36 @@ export async function listPublished(sb: DB): Promise<Post[]> {
   return data.map(toPost);
 }
 
+/** Con trỏ phân trang keyset (không trùng/không nhảy như offset). */
+export interface FeedCursor {
+  createdAt: string;
+  id: string;
+}
+
+/** Một trang Feed: bài cũ hơn `cursor` (keyset theo created_at,id). Defensive: lỗi -> []. */
+export async function listPublishedPage(
+  sb: DB,
+  limit: number,
+  cursor?: FeedCursor,
+): Promise<Post[]> {
+  let q = sb
+    .from("posts")
+    .select("*")
+    .eq("is_published", true)
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(limit);
+  if (cursor) {
+    // (created_at, id) < (cursor.createdAt, cursor.id)
+    q = q.or(
+      `created_at.lt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.lt.${cursor.id})`,
+    );
+  }
+  const { data, error } = await q;
+  if (error || !data) return [];
+  return data.map(toPost);
+}
+
 /** Mọi bài của Tác giả (cho /me). RLS posts_author_all cho phép. Defensive: lỗi -> []. */
 export async function listByAuthor(sb: DB, authorId: string): Promise<Post[]> {
   const { data, error } = await sb

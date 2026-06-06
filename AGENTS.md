@@ -26,7 +26,8 @@ Mood Blog: web blog cảm xúc cá nhân (đăng "Khoảnh khắc" + "Góc đọ
 ## Bất biến (KHÔNG được phá)
 - `src/lib/moods.ts` là **chân lý** mã→nhãn→màu. KHÔNG hardcode hex màu tâm trạng nơi khác (luôn qua token `@theme` "Lặng mát").
 - **Tim lặng = ẩn danh**, KHÔNG lưu danh tính người thả; **tổng số CHỈ Tác giả thấy** (enforce ở RLS, không chỉ UI). KHÔNG bộ đếm like công khai.
-- Light mode only (v1). KHÔNG spinner quay (dùng skeleton tĩnh / mờ dần). KHÔNG nhạc/video tự bật.
+- Light mode only (v1). KHÔNG spinner quay (dùng skeleton tĩnh / mờ dần). KHÔNG nhạc tự bật.
+- Video: ở **detail** được autoplay **MUTED** + nút "Bật tiếng" (unmute qua postMessage, không reload); tôn trọng `prefers-reduced-motion` (bỏ autoplay → chạm-mới-phát). KHÔNG autoplay có tiếng; ở **feed** chỉ poster + icon play, bấm sang detail.
 - KHÔNG import service-role key vào client (dùng `import 'server-only'`).
 
 ## Lệnh
