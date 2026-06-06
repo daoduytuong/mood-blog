@@ -59,6 +59,17 @@ export async function listPublished(sb: DB): Promise<Post[]> {
   return data.map(toPost);
 }
 
+/** Mọi bài của Tác giả (cho /me). RLS posts_author_all cho phép. Defensive: lỗi -> []. */
+export async function listByAuthor(sb: DB, authorId: string): Promise<Post[]> {
+  const { data, error } = await sb
+    .from("posts")
+    .select("*")
+    .eq("author_id", authorId)
+    .order("created_at", { ascending: false });
+  if (error || !data) return [];
+  return data.map(toPost);
+}
+
 /** Slug -> Post (hoặc null nếu không có / chưa publish). */
 export async function getBySlug(sb: DB, slug: string): Promise<Post | null> {
   const { data, error } = await sb

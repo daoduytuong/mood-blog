@@ -39,7 +39,7 @@ export async function removeHeart(
 
 /**
  * Đếm tổng tim cho MỘT bài — author-only (RLS hearts_author_read).
- * Dùng ở /me. Người xem anon sẽ nhận 0 vì RLS chặn SELECT.
+ * Người xem anon nhận 0 vì RLS chặn SELECT.
  */
 export async function countForPost(sb: DB, postId: string): Promise<number> {
   const { count, error } = await sb
@@ -48,4 +48,20 @@ export async function countForPost(sb: DB, postId: string): Promise<number> {
     .eq("post_id", postId);
   if (error || count == null) return 0;
   return count;
+}
+
+/**
+ * Tổng tim theo từng bài cho Tác giả (1 query) — RLS hearts_author_read chỉ trả
+ * tim của bài thuộc Tác giả. Dùng ở /me. Anon nhận {} (RLS chặn SELECT).
+ */
+export async function countsForAuthor(
+  sb: DB,
+): Promise<Record<string, number>> {
+  const { data, error } = await sb.from("hearts").select("post_id");
+  if (error || !data) return {};
+  const counts: Record<string, number> = {};
+  for (const row of data as { post_id: string }[]) {
+    counts[row.post_id] = (counts[row.post_id] ?? 0) + 1;
+  }
+  return counts;
 }

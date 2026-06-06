@@ -1,14 +1,17 @@
 "use client";
 
 import { useActionState, useRef, useState, useTransition } from "react";
-import { createMoment, type ComposeState } from "./actions";
+import { createMoment, createGocDoc, type ComposeState } from "./actions";
 import { resizeImage } from "./resize-image";
 import { MOODS, MOOD_CODES, type MoodCode } from "@/lib/moods";
 
 const initial: ComposeState = { error: null };
+type PostType = "khoanh_khac" | "goc_doc";
 
 export function ComposeForm() {
-  const [state, formAction] = useActionState(createMoment, initial);
+  const [type, setType] = useState<PostType>("khoanh_khac");
+  const [momentState, momentAction] = useActionState(createMoment, initial);
+  const [gocDocState, gocDocAction] = useActionState(createGocDoc, initial);
   const [pending, startTransition] = useTransition();
   const [mood, setMood] = useState<MoodCode | "">("");
   const [preview, setPreview] = useState<string | null>(null);
@@ -16,75 +19,141 @@ export function ComposeForm() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const busy = pending;
-  const error = localError ?? state.error;
+  const error = localError ?? momentState.error ?? gocDocState.error;
 
   function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     setPreview(f ? URL.createObjectURL(f) : null);
   }
 
+  function fieldValue(form: HTMLFormElement, name: string): string {
+    const el = form.elements.namedItem(name) as
+      | HTMLInputElement
+      | HTMLTextAreaElement
+      | null;
+    return el?.value.trim() ?? "";
+  }
+
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLocalError(null);
     const form = e.currentTarget;
-    const caption = (
-      form.elements.namedItem("caption") as HTMLTextAreaElement
-    ).value.trim();
-    const file = fileRef.current?.files?.[0];
-
     if (!mood) return setLocalError("Chọn một tâm trạng giúp mình nhé.");
-    if (!file) return setLocalError("Thêm một tấm ảnh nhé.");
 
-    let blob: Blob;
-    try {
-      ({ blob } = await resizeImage(file));
-    } catch {
-      return setLocalError("Ảnh này mình chưa xử lý được, thử ảnh khác nhé.");
+    const caption = fieldValue(form, "caption");
+
+    if (type === "khoanh_khac") {
+      const file = fileRef.current?.files?.[0];
+      if (!file) return setLocalError("Thêm một tấm ảnh nhé.");
+      let blob: Blob, width: number, height: number, blurDataURL: string;
+      try {
+        ({ blob, width, height, blurDataURL } = await resizeImage(file));
+      } catch {
+        return setLocalError("Ảnh này mình chưa xử lý được, thử ảnh khác nhé.");
+      }
+      const fd = new FormData();
+      fd.set("caption", caption);
+      fd.set("mood", mood);
+      fd.set("image", blob, "khoanh-khac.webp");
+      fd.set("width", String(width));
+      fd.set("height", String(height));
+      fd.set("blurDataURL", blurDataURL);
+      startTransition(() => momentAction(fd));
+    } else {
+      const linkUrl = fieldValue(form, "linkUrl");
+      const excerpt = fieldValue(form, "excerpt");
+      if (!linkUrl && !excerpt)
+        return setLocalError("Thêm một link hoặc đoạn trích nhé.");
+      const fd = new FormData();
+      fd.set("linkUrl", linkUrl);
+      fd.set("excerpt", excerpt);
+      fd.set("caption", caption);
+      fd.set("mood", mood);
+      startTransition(() => gocDocAction(fd));
     }
-
-    const fd = new FormData();
-    fd.set("caption", caption);
-    fd.set("mood", mood);
-    fd.set("image", blob, "khoanh-khac.webp");
-    startTransition(() => formAction(fd));
   }
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-6">
-      {/* Ảnh */}
-      <div>
-        <button
-          type="button"
-          onClick={() => fileRef.current?.click()}
-          className="block w-full overflow-hidden rounded-lg border border-border bg-surface text-text-muted transition-colors hover:border-accent"
-        >
-          {preview ? (
-            // eslint-disable-next-line @next/next/no-img-element -- preview tạm từ blob URL, không cần next/image
-            <img
-              src={preview}
-              alt="Xem trước"
-              className="h-64 w-full object-cover"
-            />
-          ) : (
-            <span className="flex h-40 items-center justify-center text-sm">
-              Chạm để chọn một tấm ảnh
-            </span>
-          )}
-        </button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          onChange={onPickFile}
-          className="hidden"
-        />
+      {/* Chọn loại bài */}
+      <div className="flex gap-1 self-start rounded-full border border-border p-1 text-sm">
+        {(
+          [
+            ["khoanh_khac", "Khoảnh khắc"],
+            ["goc_doc", "Góc đọc"],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={type === value}
+            onClick={() => setType(value)}
+            className={`rounded-full px-3 py-1 transition-colors ${
+              type === value
+                ? "bg-accent text-on-accent"
+                : "text-text-muted hover:text-text"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
-      {/* Caption */}
+      {type === "khoanh_khac" ? (
+        <div>
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="block w-full overflow-hidden rounded-lg border border-border bg-surface text-text-muted transition-colors hover:border-accent"
+          >
+            {preview ? (
+              // eslint-disable-next-line @next/next/no-img-element -- preview tạm từ blob URL
+              <img
+                src={preview}
+                alt="Xem trước"
+                className="h-64 w-full object-cover"
+              />
+            ) : (
+              <span className="flex h-40 items-center justify-center text-sm">
+                Chạm để chọn một tấm ảnh
+              </span>
+            )}
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            onChange={onPickFile}
+            className="hidden"
+          />
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4">
+          <input
+            type="url"
+            name="linkUrl"
+            placeholder="Dán link (tuỳ chọn)"
+            className="rounded-md border border-border bg-surface px-3 py-2 text-text outline-none focus:border-accent"
+          />
+          <textarea
+            name="excerpt"
+            rows={3}
+            placeholder="Một đoạn bạn tâm đắc…"
+            className="resize-none rounded-md border border-border bg-surface px-3 py-2 italic text-text outline-none focus:border-accent"
+            style={{ fontFamily: "var(--font-serif)" }}
+          />
+        </div>
+      )}
+
+      {/* Caption / cảm nhận */}
       <textarea
         name="caption"
         rows={3}
-        placeholder="Hôm nay bạn thấy thế nào?"
+        placeholder={
+          type === "khoanh_khac"
+            ? "Hôm nay bạn thấy thế nào?"
+            : "Vì sao bạn thích điều này?"
+        }
         className="resize-none rounded-md border border-border bg-surface px-3 py-2 text-text outline-none focus:border-accent"
         style={{ fontFamily: "var(--font-serif)" }}
       />
