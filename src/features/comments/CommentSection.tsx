@@ -190,7 +190,7 @@ export function CommentSection({
   }
 
   return (
-    <section className="mt-10 border-t border-border pt-6">
+    <section id="comments" className="mt-10 scroll-mt-24 border-t border-border pt-6">
       <h2 className="mb-3 text-sm font-medium text-text-muted">
         Đôi lời{roots.length > 0 ? ` (${roots.length})` : ""}
       </h2>
