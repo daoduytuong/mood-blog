@@ -21,8 +21,9 @@ import {
   COMMENT_THROTTLE_MS,
 } from "./identity";
 
-// Lớp bình luận công khai (Phase-2 Lát 1). Người xem nhập tên (localStorage) -> đăng ngay;
-// CHỈ tác giả (đăng nhập) trả lời 1 tầng (mô hình "chủ nhà"). Badge "tác giả" suy từ user_id.
+// Lớp bình luận công khai. Người xem nhập tên (localStorage) -> đăng ngay.
+// Trả lời 2 tầng: CẢ Người xem lẫn Tác giả trả lời được bình luận GỐC (anon reply: migration 0008).
+// Badge "tác giả" suy từ user_id = author của bài (server-truth), KHÔNG từ tên gõ.
 export function CommentSection({
   postId,
   authorId,
@@ -42,6 +43,7 @@ export function CommentSection({
   const [pending, setPending] = useState(false);
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [replyBody, setReplyBody] = useState("");
+  const [replyError, setReplyError] = useState<string | null>(null);
 
   // Danh tính khách + làm tươi danh sách (vượt cache ISR) + kiểm có phải tác giả.
   useEffect(() => {
@@ -139,27 +141,51 @@ export function CommentSection({
     }
   }
 
+  // Trả lời một bình luận GỐC — cho cả Tác giả (badge) lẫn Người xem (anon, có tên).
   async function submitReply(parentId: string) {
-    const parsed = replyBodySchema.safeParse(replyBody);
-    if (!parsed.success) return;
+    setReplyError(null);
     const sb = createClient();
     const {
       data: { user },
     } = await sb.auth.getUser();
-    if (!user) return;
+    const asAuthor = !!user && user.id === authorId;
+
     try {
-      const created = await insertComment(sb, {
-        postId,
-        parentId,
-        body: parsed.data,
-        authorName: user.email?.split("@")[0] ?? "Tác giả",
-        userId: user.id,
-      });
+      let created: Comment;
+      if (asAuthor) {
+        const parsed = replyBodySchema.safeParse(replyBody);
+        if (!parsed.success) return setReplyError("Viết đôi dòng nhé.");
+        created = await insertComment(sb, {
+          postId,
+          parentId,
+          body: parsed.data,
+          authorName: user!.email?.split("@")[0] ?? "Tác giả",
+          userId: user!.id,
+        });
+      } else {
+        // Khách trả lời: cần tên + nội dung; có throttle như bình luận gốc.
+        if (Date.now() - lastCommentAt() < COMMENT_THROTTLE_MS) {
+          return setReplyError("Từ từ chút nhé — đợi một lát rồi gửi tiếp.");
+        }
+        const parsed = commentSchema.safeParse({ authorName: name, body: replyBody });
+        if (!parsed.success) {
+          return setReplyError(parsed.error.issues[0]?.message ?? "Có gì đó chưa ổn.");
+        }
+        created = await insertComment(sb, {
+          postId,
+          parentId,
+          body: parsed.data.body,
+          authorName: parsed.data.authorName,
+          anonId: getAnonId(),
+        });
+        setCommenterName(parsed.data.authorName);
+        markCommented();
+      }
       setComments((cs) => [...cs, created]);
       setReplyBody("");
       setReplyTo(null);
     } catch {
-      /* im lặng */
+      setReplyError("Chưa gửi được, thử lại nhé.");
     }
   }
 
@@ -216,45 +242,65 @@ export function CommentSection({
                 </div>
               ))}
 
-              {isAuthor &&
-                (replyTo === c.id ? (
-                  <div className="ml-4 mt-3 flex flex-col gap-2">
-                    <textarea
-                      value={replyBody}
-                      onChange={(e) => setReplyBody(e.target.value)}
-                      rows={2}
-                      placeholder="Trả lời với tư cách chủ nhà…"
-                      className="resize-none rounded-md border border-border bg-surface px-3 py-2 font-serif text-text outline-none focus:border-accent"
+              {replyTo === c.id ? (
+                <div className="ml-4 mt-3 flex flex-col gap-2">
+                  {!isAuthor && (
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      maxLength={40}
+                      placeholder="Tên của bạn"
+                      className="rounded-md border border-border bg-surface px-3 py-2 text-sm text-text outline-none focus:border-accent"
                     />
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => submitReply(c.id)}
-                        className="rounded-md bg-accent px-3 py-1.5 text-sm text-on-accent"
-                      >
-                        Gửi trả lời
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setReplyTo(null);
-                          setReplyBody("");
-                        }}
-                        className="text-sm text-text-muted hover:text-text"
-                      >
-                        Huỷ
-                      </button>
-                    </div>
+                  )}
+                  <textarea
+                    value={replyBody}
+                    onChange={(e) => setReplyBody(e.target.value)}
+                    rows={2}
+                    maxLength={500}
+                    placeholder={isAuthor ? "Trả lời với tư cách chủ nhà…" : "Trả lời…"}
+                    className="resize-none rounded-md border border-border bg-surface px-3 py-2 font-serif text-text outline-none focus:border-accent"
+                  />
+                  {replyError && (
+                    <p className="text-xs text-text-muted" role="alert">
+                      {replyError}
+                    </p>
+                  )}
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => submitReply(c.id)}
+                      className="rounded-md bg-accent px-3 py-1.5 text-sm text-on-accent"
+                    >
+                      Gửi trả lời
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReplyTo(null);
+                        setReplyBody("");
+                        setReplyError(null);
+                      }}
+                      className="text-sm text-text-muted hover:text-text"
+                    >
+                      Huỷ
+                    </button>
                   </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setReplyTo(c.id)}
-                    className="ml-4 mt-2 text-xs text-accent hover:underline"
-                  >
-                    Trả lời
-                  </button>
-                ))}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReplyTo(c.id);
+                    setReplyBody("");
+                    setReplyError(null);
+                  }}
+                  className="ml-4 mt-2 text-xs text-accent hover:underline"
+                >
+                  Trả lời
+                </button>
+              )}
             </li>
           ))}
         </ul>

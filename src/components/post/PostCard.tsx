@@ -3,6 +3,7 @@ import type { Post } from "@/lib/db/posts";
 import { mediaPublicUrl } from "@/lib/storage";
 import { formatPostDate } from "@/lib/date";
 import { ImageBlur } from "@/components/ui/ImageBlur";
+import { CommentIcon } from "@/components/ui/CommentIcon";
 import { MoodBar, MoodLabel } from "./MoodBar";
 import { HeartButton } from "@/features/hearts/HeartButton";
 
@@ -72,6 +73,18 @@ export function PostCard({
             </span>
             <span aria-hidden>·</span>
             <time dateTime={post.createdAt}>{formatPostDate(post.createdAt)}</time>
+            {post.commentCount > 0 && (
+              <>
+                <span aria-hidden>·</span>
+                <span
+                  className="inline-flex items-center gap-1"
+                  aria-label={`${post.commentCount} lời`}
+                >
+                  <CommentIcon size={12} />
+                  {post.commentCount}
+                </span>
+              </>
+            )}
           </div>
           <MoodLabel mood={post.mood} />
         </div>

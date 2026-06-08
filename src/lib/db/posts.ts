@@ -18,9 +18,13 @@ export interface Post {
   slug: string;
   isPublished: boolean;
   createdAt: string;
+  commentCount: number; // số lời chưa ẩn (từ PostgREST embed; 0 nếu query không kèm)
 }
 
-function toPost(r: PostRow): Post {
+// Row có thể kèm aggregate `comments(count)` từ PostgREST.
+type PostRowWithCount = PostRow & { comments?: { count: number }[] };
+
+function toPost(r: PostRowWithCount): Post {
   return {
     id: r.id,
     authorId: r.author_id,
@@ -33,8 +37,12 @@ function toPost(r: PostRow): Post {
     slug: r.slug,
     isPublished: r.is_published,
     createdAt: r.created_at,
+    commentCount: r.comments?.[0]?.count ?? 0,
   };
 }
+
+// Cột công khai + đếm bình luận chưa ẩn (tôn trọng RLS) cho Feed & chi tiết.
+const FEED_COLS = "*, comments(count)";
 
 export interface NewPost {
   authorId: string;
@@ -51,7 +59,7 @@ export interface NewPost {
 export async function listPublished(sb: DB): Promise<Post[]> {
   const { data, error } = await sb
     .from("posts")
-    .select("*")
+    .select(FEED_COLS)
     .eq("is_published", true)
     .order("created_at", { ascending: false })
     .order("id", { ascending: false });
@@ -73,7 +81,7 @@ export async function listPublishedPage(
 ): Promise<Post[]> {
   let q = sb
     .from("posts")
-    .select("*")
+    .select(FEED_COLS)
     .eq("is_published", true)
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
@@ -104,7 +112,7 @@ export async function listByAuthor(sb: DB, authorId: string): Promise<Post[]> {
 export async function getBySlug(sb: DB, slug: string): Promise<Post | null> {
   const { data, error } = await sb
     .from("posts")
-    .select("*")
+    .select(FEED_COLS)
     .eq("slug", slug)
     .eq("is_published", true)
     .maybeSingle();
