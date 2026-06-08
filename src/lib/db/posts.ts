@@ -93,7 +93,11 @@ export async function listPublishedPage(
     );
   }
   const { data, error } = await q;
-  if (error || !data) return [];
+  if (error || !data) {
+    if (error)
+      console.error("[listPublishedPage]", error.code, error.message, error.details, error.hint);
+    return [];
+  }
   return data.map(toPost);
 }
 
