@@ -11,11 +11,11 @@ revoke update on comments from authenticated;
 grant  update (is_hidden) on comments to authenticated;
 
 -- (3a) Cột IP (ẩn khỏi SELECT công khai) phục vụ rate-limit.
-alter table comments add column anon_ip text;
+alter table comments add column if not exists anon_ip text;
 revoke select (anon_ip) on comments from anon, authenticated;
 
 -- (3b) Khách CHỈ bình luận lên bài ĐÃ PUBLISH (vẫn ép user_id null + parent_id null).
-drop policy comments_anon_insert on comments;
+drop policy if exists comments_anon_insert on comments;
 create policy comments_anon_insert on comments
   for insert to anon
   with check (
@@ -60,6 +60,7 @@ begin
 end;
 $$;
 
+drop trigger if exists trg_comments_rate_limit on comments;
 create trigger trg_comments_rate_limit
   before insert on comments
   for each row execute function comments_rate_limit();
