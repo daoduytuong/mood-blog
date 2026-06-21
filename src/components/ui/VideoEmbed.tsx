@@ -10,18 +10,21 @@ function sendVimeo(win: Window, method: string, value: unknown) {
 }
 
 // Detail: autoPlay -> phát ngay nhưng MUTED (chính sách trình duyệt) + nút bật tiếng.
-// Mặc định (feed/khác): poster tĩnh, CHẠM MỚI PHÁT (có tiếng luôn vì là user gesture).
+// Feed (startMutedOnTap): chạm -> phát MUTED + nút "bật tiếng" (đỡ giật khi lướt nhiều bài).
+// Mặc định khác: poster tĩnh, CHẠM MỚI PHÁT có tiếng luôn (user gesture).
 // Tôn trọng prefers-reduced-motion: không autoplay, quay về chạm-mới-phát.
 export function VideoEmbed({
   videoId,
   poster,
   caption,
   autoPlay = false,
+  startMutedOnTap = false,
 }: {
   videoId: string;
   poster?: string;
   caption?: string;
   autoPlay?: boolean;
+  startMutedOnTap?: boolean;
 }) {
   // null = poster (chạm-mới-phát). { muted } = đang phát; muted cố định -> src ổn định,
   // đổi tiếng qua postMessage KHÔNG làm iframe tải lại.
@@ -43,7 +46,8 @@ export function VideoEmbed({
   const showUnmute = !!started?.muted && !unmuted;
 
   function play() {
-    setStarted({ muted: false }); // user gesture -> có tiếng luôn
+    // Feed: bắt đầu MUTED + hiện nút bật tiếng. Khác: có tiếng luôn (user gesture).
+    setStarted({ muted: startMutedOnTap });
   }
 
   function unmute() {

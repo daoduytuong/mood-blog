@@ -25,3 +25,22 @@ export function MoodLabel({ mood }: { mood: MoodCode }) {
     </span>
   );
 }
+
+// Kicker tâm trạng (editorial): chấm + TÊN in-hoa giãn chữ, nhuốm màu mood.
+// "Màu là hơi thở, chữ là tên gọi" — màu chỉ ở chấm + chữ, KHÔNG nhuốm nền.
+export function MoodKicker({ mood }: { mood: MoodCode }) {
+  const { label, tokenVar } = MOODS[mood];
+  return (
+    <span
+      className="inline-flex items-center gap-2 uppercase tracking-[0.18em]"
+      style={{ color: `var(${tokenVar})` }}
+    >
+      <span
+        aria-hidden
+        className="h-2 w-2 rounded-full"
+        style={{ background: `var(${tokenVar})` }}
+      />
+      {label}
+    </span>
+  );
+}

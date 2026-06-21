@@ -24,10 +24,10 @@ Mood Blog: web blog cảm xúc cá nhân (đăng "Khoảnh khắc" + "Góc đọ
 - Route App Router ở `src/app`. Định danh code/route **tiếng Anh**; nội dung hiển thị **tiếng Việt**.
 
 ## Bất biến (KHÔNG được phá)
-- `src/lib/moods.ts` là **chân lý** mã→nhãn→màu. KHÔNG hardcode hex màu tâm trạng nơi khác (luôn qua token `@theme` "Lặng mát").
+- `src/lib/moods.ts` là **chân lý** mã→nhãn→màu. KHÔNG hardcode hex màu tâm trạng nơi khác (luôn qua token `@theme` — design system **"Ấn bản"**, có light + dark). Ngoại lệ DUY NHẤT được hardcode hex: icon/OG (`brand-icon.tsx`, `opengraph-image.tsx`) vì next/og không đọc CSS token.
 - **Tim lặng = ẩn danh**, KHÔNG lưu danh tính người thả; **tổng số CHỈ Tác giả thấy** (enforce ở RLS, không chỉ UI). KHÔNG bộ đếm like công khai.
-- Light mode only (v1). KHÔNG spinner quay (dùng skeleton tĩnh / mờ dần). KHÔNG nhạc tự bật.
-- Video: ở **detail** được autoplay **MUTED** + nút "Bật tiếng" (unmute qua postMessage, không reload); tôn trọng `prefers-reduced-motion` (bỏ autoplay → chạm-mới-phát). KHÔNG autoplay có tiếng; ở **feed** chỉ poster + icon play, bấm sang detail.
+- Light + dark ("giấy"/"mực") — toggle qua class `.dark` trên `<html>`; chống FOUC bằng inline script ở `layout.tsx`. KHÔNG spinner quay (dùng skeleton tĩnh / mờ dần). KHÔNG nhạc tự bật. Hover chỉ đổi màu/viền, KHÔNG chuyển động.
+- Video: **detail** autoplay MUTED + nút "Bật tiếng"; **feed** chạm-mới-phát INLINE (muted + nút bật tiếng), KHÔNG autoplay-khi-cuộn/Reels. Tôn trọng `prefers-reduced-motion`. KHÔNG autoplay có tiếng.
 - KHÔNG import service-role key vào client (dùng `import 'server-only'`).
 
 ## Lệnh

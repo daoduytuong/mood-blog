@@ -1,31 +1,31 @@
 @import "tailwindcss";
 
 /*
-  Design system "Lặng mát" — nguồn chân lý token ở DESIGN.md.
-  Light mode only (không dark mode ở v1).
+  Design system "Ấn bản" — nguồn chân lý token ở DESIGN.md.
+  Light + dark ('giấy'/'mực'). Toggle qua class .dark trên <html>.
   Màu tâm trạng: dùng qua src/lib/moods.ts (mood_code -> tokenVar), KHÔNG hardcode hex nơi khác.
 */
 @theme {
   /* Trung tính & điểm nhấn */
-  --color-background: #f2f6f8; /* nền trang — ánh ban mai */
-  --color-surface: #fbfdfe; /* mặt thẻ */
-  --color-text: #3e4a53; /* chữ chính */
-  --color-text-muted: #8c9aa4; /* chữ mờ */
-  --color-border: #dee8ed; /* viền mảnh */
-  --color-accent: #6fa3b8; /* tim, link, nút chính */
-  --color-on-accent: #ffffff;
+  --color-background: #F4EEE2;
+  --color-surface:    #FBF7EF;
+  --color-text:       #211C15;
+  --color-text-muted: #6B6357;
+  --color-border:     #D9CFBD;
+  --color-accent:     #A6492B;
+  --color-on-accent:  #FBF7EF;
 
   /* 6 sắc màu tâm trạng */
-  --color-mood-hoai-niem: #c7b4ae;
-  --color-mood-binh-yen: #a6cbc9;
-  --color-mood-vui: #e8ce93;
-  --color-mood-buon: #8fa9c6;
-  --color-mood-tram-tu: #9faac0;
-  --color-mood-co-don: #b4c0c8;
+  --color-mood-hoai-niem: #B07A6E;
+  --color-mood-binh-yen:  #6E9B8F;
+  --color-mood-vui:       #C2842A;
+  --color-mood-buon:      #5E7BA6;
+  --color-mood-tram-tu:   #6F6F9C;
+  --color-mood-co-don:    #7C8893;
 
   /* Font (gán từ next/font ở layout.tsx) */
-  --font-serif: var(--font-lora);
-  --font-sans: var(--font-inter);
+  --font-serif: var(--font-playfair);
+  --font-sans:  var(--font-be-vietnam);
 
   /* Bo góc */
   --radius-sm: 0.5rem;
@@ -40,10 +40,30 @@
   --spacing-container: 600px; /* chiều rộng tối đa một cột */
 }
 
+@custom-variant dark (&:where(.dark, .dark *));
+
+.dark {
+  --color-background: #14110B;
+  --color-surface:    #1D1910;
+  --color-text:       #ECE3D1;
+  --color-text-muted: #9A9079;
+  --color-border:     #322C20;
+  --color-accent:     #DB7551;
+  --color-on-accent:  #1D1910;
+
+  --color-mood-hoai-niem: #CE9587;
+  --color-mood-binh-yen:  #8FBCAE;
+  --color-mood-vui:       #E0A94A;
+  --color-mood-buon:      #88A2C9;
+  --color-mood-tram-tu:   #9799C4;
+  --color-mood-co-don:    #9DAAB4;
+}
+
 body {
   background: var(--color-background);
   color: var(--color-text);
   font-family: var(--font-sans), system-ui, sans-serif;
+  transition: background-color .3s, color .3s;
 }
 
 /* Bo trải nghiệm tới mép (craft IG/app gốc): bỏ flash chạm, không lộ nền trắng khi kéo biên. */
