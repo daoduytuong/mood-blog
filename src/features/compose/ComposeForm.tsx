@@ -8,44 +8,62 @@ import {
   useTransition,
 } from "react";
 import {
-  createMoment,
+  createMomentImages,
   createMomentVideo,
   createGocDoc,
   type ComposeState,
 } from "./actions";
 import { resizeImage } from "./resize-image";
 import { MOODS, MOOD_CODES, type MoodCode } from "@/lib/moods";
+import { createClient } from "@/lib/supabase/client";
+
+const MAX_IMAGES = 10;
 
 const initial: ComposeState = { error: null };
 type PostType = "khoanh_khac" | "goc_doc";
 type MomentKind = "image" | "video"; // Khoảnh khắc: ảnh hoặc video Vimeo
 
+type Picked = { file: File; url: string };
+
 export function ComposeForm() {
   const [type, setType] = useState<PostType>("khoanh_khac");
   const [momentKind, setMomentKind] = useState<MomentKind>("image");
-  const [momentState, momentAction] = useActionState(createMoment, initial);
+  const [imagesState, imagesAction] = useActionState(createMomentImages, initial);
   const [videoState, videoAction] = useActionState(createMomentVideo, initial);
   const [gocDocState, gocDocAction] = useActionState(createGocDoc, initial);
   const [pending, startTransition] = useTransition();
   const [mood, setMood] = useState<MoodCode | "">("");
-  const [preview, setPreview] = useState<string | null>(null);
+  const [images, setImages] = useState<Picked[]>([]);
+  const [uploading, setUploading] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const imagesRef = useRef<Picked[]>([]);
 
-  const busy = pending;
+  // Giữ ref đồng bộ để cleanup effect đọc được bản mới nhất (tránh stale closure).
+  useEffect(() => { imagesRef.current = images; });
+
+  const busy = pending || uploading;
   const error =
-    localError ?? momentState.error ?? videoState.error ?? gocDocState.error;
+    localError ?? imagesState.error ?? videoState.error ?? gocDocState.error;
 
-  // Thu hồi blob URL preview (tránh rò bộ nhớ): revoke khi đổi ảnh / rời form.
-  useEffect(() => {
-    return () => {
-      if (preview) URL.revokeObjectURL(preview);
-    };
-  }, [preview]);
+  // Thu hồi tất cả blob URL khi unmount.
+  useEffect(() => () => { imagesRef.current.forEach((im) => URL.revokeObjectURL(im.url)); }, []);
 
-  function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0];
-    setPreview(f ? URL.createObjectURL(f) : null);
+  function onPickFiles(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    setImages((prev) => {
+      const room = MAX_IMAGES - prev.length;
+      const add = files.slice(0, Math.max(0, room)).map((file) => ({ file, url: URL.createObjectURL(file) }));
+      return [...prev, ...add];
+    });
+    e.target.value = ""; // cho chọn lại cùng file
+  }
+
+  function removeImage(i: number) {
+    setImages((prev) => {
+      URL.revokeObjectURL(prev[i].url);
+      return prev.filter((_, k) => k !== i);
+    });
   }
 
   function fieldValue(form: HTMLFormElement, name: string): string {
@@ -73,22 +91,34 @@ export function ComposeForm() {
       fd.set("videoUrl", videoUrl);
       startTransition(() => videoAction(fd));
     } else if (type === "khoanh_khac") {
-      const file = fileRef.current?.files?.[0];
-      if (!file) return setLocalError("Thêm một tấm ảnh nhé.");
-      let blob: Blob, width: number, height: number, blurDataURL: string;
+      if (images.length === 0) return setLocalError("Thêm ít nhất một tấm ảnh nhé.");
+      setUploading(true);
       try {
-        ({ blob, width, height, blurDataURL } = await resizeImage(file));
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) { setUploading(false); return setLocalError("Bạn cần đăng nhập đã nhé."); }
+        const media: { path: string; w: number; h: number; blurDataURL: string }[] = [];
+        for (const im of images) {
+          let r;
+          try { r = await resizeImage(im.file); }
+          catch { setUploading(false); return setLocalError("Một tấm ảnh chưa xử lý được, thử ảnh khác nhé."); }
+          const path = `${user.id}/${crypto.randomUUID()}.webp`;
+          const { error: upErr } = await supabase.storage
+            .from("media")
+            .upload(path, r.blob, { contentType: "image/webp", upsert: false });
+          if (upErr) { setUploading(false); return setLocalError("Chưa tải được ảnh lên, thử lại nhé."); }
+          media.push({ path, w: r.width, h: r.height, blurDataURL: r.blurDataURL });
+        }
+        setUploading(false);
+        const fd = new FormData();
+        fd.set("caption", caption);
+        fd.set("mood", mood);
+        fd.set("media", JSON.stringify(media));
+        startTransition(() => imagesAction(fd));
       } catch {
-        return setLocalError("Ảnh này mình chưa xử lý được, thử ảnh khác nhé.");
+        setUploading(false);
+        return setLocalError("Có lỗi khi tải ảnh, thử lại nhé.");
       }
-      const fd = new FormData();
-      fd.set("caption", caption);
-      fd.set("mood", mood);
-      fd.set("image", blob, "khoanh-khac.webp");
-      fd.set("width", String(width));
-      fd.set("height", String(height));
-      fd.set("blurDataURL", blurDataURL);
-      startTransition(() => momentAction(fd));
     } else {
       const linkUrl = fieldValue(form, "linkUrl");
       const excerpt = fieldValue(form, "excerpt");
@@ -156,32 +186,30 @@ export function ComposeForm() {
           </div>
 
           {momentKind === "image" ? (
-            <div>
-              <button
-                type="button"
-                onClick={() => fileRef.current?.click()}
-                className="block w-full overflow-hidden rounded-lg border border-border bg-surface text-text-muted transition-colors hover:border-accent"
-              >
-                {preview ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- preview tạm từ blob URL
-                  <img
-                    src={preview}
-                    alt="Xem trước"
-                    className="h-64 w-full object-cover"
-                  />
-                ) : (
-                  <span className="flex h-40 items-center justify-center text-sm">
-                    Chạm để chọn một tấm ảnh
-                  </span>
+            <div className="flex flex-col gap-3">
+              <div className="grid grid-cols-3 gap-2">
+                {images.map((im, i) => (
+                  <div key={im.url} className="relative aspect-square overflow-hidden rounded-md border border-border">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- preview blob tạm */}
+                    <img src={im.url} alt="" className="h-full w-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => removeImage(i)}
+                      aria-label={`Bỏ ảnh ${i + 1}`}
+                      className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full bg-surface/90 text-text shadow-soft transition-colors hover:text-accent"
+                    >×</button>
+                  </div>
+                ))}
+                {images.length < MAX_IMAGES && (
+                  <button
+                    type="button"
+                    onClick={() => fileRef.current?.click()}
+                    className="flex aspect-square items-center justify-center rounded-md border border-dashed border-border text-sm text-text-muted transition-colors hover:border-accent hover:text-text"
+                  >+ Ảnh</button>
                 )}
-              </button>
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                onChange={onPickFile}
-                className="hidden"
-              />
+              </div>
+              <input ref={fileRef} type="file" accept="image/*" multiple onChange={onPickFiles} className="hidden" />
+              <p className="text-xs text-text-muted">Tối đa {MAX_IMAGES} ảnh · vuốt để xem trong feed.</p>
             </div>
           ) : (
             <div className="flex flex-col gap-2">

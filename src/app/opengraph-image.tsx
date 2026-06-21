@@ -18,8 +18,8 @@ export default function OpengraphImage() {
           alignItems: "center",
           justifyContent: "center",
           gap: 32,
-          background: "#F2F6F8",
-          color: "#3E4A53",
+          background: "#F4EEE2",
+          color: "#211C15",
         }}
       >
         <div style={{ fontSize: 260, fontWeight: 600, lineHeight: 1 }}>k</div>
@@ -28,7 +28,7 @@ export default function OpengraphImage() {
             width: 140,
             height: 5,
             borderRadius: 3,
-            background: "#6FA3B8",
+            background: "#A6492B",
           }}
         />
       </div>

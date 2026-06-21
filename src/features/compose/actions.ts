@@ -10,9 +10,10 @@ import {
   deletePost,
 } from "@/lib/db/posts";
 import { slugify } from "./slug";
-import { momentSchema, gocDocSchema } from "./schema";
+import { gocDocSchema } from "./schema";
 import { fetchVimeoMeta } from "./vimeo";
 import { MOOD_CODES, type MoodCode } from "@/lib/moods";
+import type { MediaItem } from "@/lib/db/types";
 
 export interface ComposeState {
   error: string | null;
@@ -30,68 +31,65 @@ async function uniqueSlug(
   return slug;
 }
 
-export async function createMoment(
+const MAX_IMAGES = 10;
+
+// Khử media ảnh từ client (chống tamper): path PHẢI thuộc namespace user; blurDataURL capped.
+function sanitizeImageMedia(raw: unknown, userId: string): MediaItem[] {
+  if (!Array.isArray(raw)) return [];
+  const out: MediaItem[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const r = item as Record<string, unknown>;
+    if (typeof r.path !== "string" || !r.path.startsWith(`${userId}/`)) continue;
+    const w = Number(r.w) || undefined;
+    const h = Number(r.h) || undefined;
+    const b = r.blurDataURL;
+    const blurDataURL =
+      typeof b === "string" && b.startsWith("data:image/") && b.length < 4000 ? b : undefined;
+    out.push({ path: r.path, w, h, blurDataURL });
+  }
+  return out;
+}
+
+// Khoảnh khắc ẢNH (1..N) — ảnh đã được client upload lên Storage; action chỉ insert post.
+export async function createMomentImages(
   _prev: ComposeState,
   formData: FormData,
 ): Promise<ComposeState> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Bạn cần đăng nhập đã nhé." };
 
   const caption = String(formData.get("caption") ?? "").trim();
   const mood = String(formData.get("mood") ?? "");
-  const file = formData.get("image");
-  // Kích thước + blur preview (blur-up chống CLS — Story 2.3). Cap blurDataURL phòng rác.
-  const width = Number(formData.get("width")) || undefined;
-  const height = Number(formData.get("height")) || undefined;
-  const rawBlur = String(formData.get("blurDataURL") ?? "");
-  const blurDataURL =
-    rawBlur.startsWith("data:image/") && rawBlur.length < 4000
-      ? rawBlur
-      : undefined;
+  if (!MOOD_CODES.includes(mood as MoodCode))
+    return { error: "Chọn một tâm trạng giúp mình nhé." };
 
-  const parsed = momentSchema.safeParse({
-    caption: caption || undefined,
-    mood,
-  });
-  if (!parsed.success) return { error: "Chọn một tâm trạng giúp mình nhé." };
-  if (!(file instanceof File) || file.size === 0) {
-    return { error: "Thêm một tấm ảnh nhé." };
+  let media: MediaItem[] = [];
+  try {
+    media = sanitizeImageMedia(JSON.parse(String(formData.get("media") ?? "[]")), user.id);
+  } catch {
+    media = [];
   }
+  if (media.length === 0) return { error: "Thêm ít nhất một tấm ảnh nhé." };
+  if (media.length > MAX_IMAGES) media = media.slice(0, MAX_IMAGES);
 
-  // Slug duy nhất (ASCII từ caption; rỗng -> mã ngắn).
-  const base = slugify(caption) || `khoanh-khac-${Date.now().toString(36)}`;
-  let slug = base;
-  for (let i = 2; await getBySlug(supabase, slug); i++) slug = `${base}-${i}`;
-
-  // 1) Upload ảnh TRƯỚC (fail -> không tạo bài, không mồ côi).
-  const path = `${user.id}/${slug}-${crypto.randomUUID().slice(0, 8)}.webp`;
-  const { error: upErr } = await supabase.storage
-    .from("media")
-    .upload(path, file, {
-      contentType: file.type || "image/webp",
-      upsert: false,
-    });
-  if (upErr) return { error: "Chưa lưu được ảnh, thử lại nhé." };
-
-  // 2) Insert bài SAU (fail -> dọn ảnh mồ côi).
+  const slug = await uniqueSlug(supabase, caption, "khoanh-khac");
   try {
     await createPost(supabase, {
       authorId: user.id,
       type: "khoanh_khac",
-      mood: parsed.data.mood as MoodCode,
+      mood: mood as MoodCode,
       slug,
       caption: caption || null,
-      media: [{ path, w: width, h: height, blurDataURL }],
+      media,
     });
   } catch {
-    await supabase.storage.from("media").remove([path]);
+    // Dọn ảnh mồ côi đã upload từ client (RLS author delete cho authenticated).
+    const paths = media.map((m) => m.path).filter((p): p is string => !!p);
+    if (paths.length) await supabase.storage.from("media").remove(paths);
     return { error: "Chưa lưu được bài, thử lại nhé." };
   }
-
-  // Về Feed: bài mới nằm trên cùng (UJ-1). Trang chi tiết /m/[slug] xây ở Story 2.4.
   redirect("/");
 }
 

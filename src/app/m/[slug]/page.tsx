@@ -7,10 +7,13 @@ import { listComments } from "@/lib/db/comments";
 import { mediaPublicUrl } from "@/lib/storage";
 import { siteUrl } from "@/lib/site";
 import { Lightbox } from "@/components/ui/Lightbox";
-import { MoodBar, MoodLabel } from "@/components/post/MoodBar";
+import { MoodKicker } from "@/components/post/MoodBar";
+import { formatPostDate } from "@/lib/date";
+import { MOODS } from "@/lib/moods";
 import { PostAuthorActions } from "@/components/post/PostAuthorActions";
 import { ShareButton } from "@/components/post/ShareButton";
 import { HeartButton } from "@/features/hearts/HeartButton";
+import { Gallery } from "@/components/ui/Gallery";
 import { VideoEmbed } from "@/components/ui/VideoEmbed";
 import { CommentSection } from "@/features/comments/CommentSection";
 
@@ -72,11 +75,12 @@ export default async function PostDetail({
   const initialComments = await listComments(createPublicClient(), post.id);
 
   const isMoment = post.type === "khoanh_khac";
-  const media = post.media[0];
-  const isVideo = media?.provider === "vimeo" && !!media.video_id;
-  const imgPath = media?.path;
-  // Tỉ lệ ảnh THẬT ở chi tiết (kẹp trần 4:5 cho ảnh quá cao); thiếu w/h -> fallback 4/3.
-  const ratio = media?.w && media?.h ? Math.max(media.w / media.h, 0.8) : undefined;
+  const videoMedia = post.media.find((m) => m.provider === "vimeo" && !!m.video_id);
+  const imageItems = post.media.filter((m) => !!m.path);
+  const isVideo = !!videoMedia;
+  // ratio THẬT từng ảnh (kẹp trần 4:5); thiếu w/h -> undefined (ImageBlur fallback 4/3).
+  const ratioOf = (m: (typeof imageItems)[number]) =>
+    m.w && m.h ? Math.max(m.w / m.h, 0.8) : undefined;
 
   return (
     <main className="mx-auto w-full max-w-container px-4.5 py-8">
@@ -84,37 +88,60 @@ export default async function PostDetail({
         ← Về Feed
       </Link>
 
-      <article className="relative mt-4 overflow-hidden rounded-lg border border-border bg-surface shadow-[0_4px_20px_rgba(62,74,83,0.06)]">
-        <MoodBar mood={post.mood} />
+      <article className="relative mt-6">
+        {/* Kicker editorial: tâm trạng (màu) / loại · ngày */}
+        <div className="mb-5 flex items-center justify-between gap-3 text-[11px] text-text-muted">
+          <div className="flex items-center gap-2.5">
+            <MoodKicker mood={post.mood} />
+            <span aria-hidden className="text-border">
+              /
+            </span>
+            <span className="uppercase tracking-[0.18em]">
+              {isMoment ? "Khoảnh khắc" : "Góc đọc"}
+            </span>
+          </div>
+          <time dateTime={post.createdAt} className="shrink-0 uppercase tracking-[0.16em]">
+            {formatPostDate(post.createdAt)}
+          </time>
+        </div>
 
         {isMoment &&
           (isVideo ? (
             <VideoEmbed
-              videoId={media!.video_id!}
-              poster={media!.poster_url}
+              videoId={videoMedia!.video_id!}
+              poster={videoMedia!.poster_url}
               caption={post.caption ?? undefined}
               autoPlay
             />
-          ) : imgPath ? (
+          ) : imageItems.length > 1 ? (
+            <Gallery ariaLabel={post.caption ?? "Bộ ảnh"}>
+              {imageItems.map((m, i) => (
+                <Lightbox
+                  key={i}
+                  src={mediaPublicUrl(m.path!)}
+                  alt={`${post.caption ?? "Một khoảnh khắc"} (ảnh ${i + 1})`}
+                  sizes="(max-width: 600px) 100vw, 600px"
+                  blurDataURL={m.blurDataURL}
+                  ratio={ratioOf(m)}
+                  priority={i === 0}
+                />
+              ))}
+            </Gallery>
+          ) : imageItems[0]?.path ? (
             <Lightbox
-              src={mediaPublicUrl(imgPath)}
+              src={mediaPublicUrl(imageItems[0].path)}
               alt={post.caption ?? "Một khoảnh khắc"}
               sizes="(max-width: 600px) 100vw, 600px"
-              blurDataURL={media?.blurDataURL}
-              ratio={ratio}
+              blurDataURL={imageItems[0].blurDataURL}
+              ratio={ratioOf(imageItems[0])}
               priority
             />
           ) : null)}
 
-        <div className="flex flex-col gap-3 p-6 pl-7">
-          <MoodLabel mood={post.mood} />
-
+        <div className="mt-6 flex flex-col gap-4">
           {isMoment ? (
             post.caption && (
-              <p
-                className="text-lg leading-relaxed text-text"
-                style={{ fontFamily: "var(--font-serif)" }}
-              >
+              <p className="font-serif text-[1.7rem] leading-[1.35] text-text">
                 {post.caption}
               </p>
             )
@@ -122,19 +149,21 @@ export default async function PostDetail({
             <>
               {post.excerpt && (
                 <blockquote
-                  className="border-l-2 border-border pl-4 text-lg italic leading-relaxed text-text"
-                  style={{ fontFamily: "var(--font-serif)" }}
+                  className="border-l-2 pl-5 font-serif text-[1.6rem] italic leading-[1.4] text-text"
+                  style={{ borderColor: `var(${MOODS[post.mood].tokenVar})` }}
                 >
                   {post.excerpt}
                 </blockquote>
               )}
-              {post.caption && <p className="text-text-muted">{post.caption}</p>}
+              {post.caption && (
+                <p className="leading-relaxed text-text-muted">{post.caption}</p>
+              )}
               {post.linkUrl && (
                 <a
                   href={post.linkUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-sm text-accent hover:underline"
+                  className="text-[11px] uppercase tracking-[0.16em] text-accent hover:underline"
                 >
                   nguồn ↗
                 </a>
