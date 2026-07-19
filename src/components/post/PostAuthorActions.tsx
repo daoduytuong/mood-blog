@@ -4,15 +4,18 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { deletePostAction } from "@/features/compose/actions";
+import type { PostType } from "@/lib/db/types";
 
 // Story 1.7 — điều khiển sửa/xoá CHỈ hiện cho Tác giả. Kiểm session phía client
 // để trang chi tiết vẫn SSG/ISR (không cookies). RLS + action vẫn chặn server-side.
 export function PostAuthorActions({
   postId,
   slug,
+  type,
 }: {
   postId: string;
   slug: string;
+  type?: PostType;
 }) {
   const [authed, setAuthed] = useState(false);
 
@@ -29,6 +32,14 @@ export function PostAuthorActions({
 
   return (
     <div className="flex items-center gap-4 border-t border-border pt-4 text-sm">
+      {type === "hanh_trinh" && (
+        <Link
+          href={`/m/${slug}/add`}
+          className="text-accent underline-offset-2 hover:underline"
+        >
+          + Thêm chặng
+        </Link>
+      )}
       <Link
         href={`/m/${slug}/edit`}
         className="text-text-muted hover:text-text"

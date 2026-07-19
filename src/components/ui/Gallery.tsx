@@ -74,21 +74,23 @@ export function Gallery({
         {index + 1}/{n}
       </div>
 
-      {/* Chấm chỉ số — bấm để nhảy ảnh */}
-      <div className="absolute inset-x-0 bottom-2 flex items-center justify-center gap-1.5">
-        {slides.map((_, i) => (
-          <button
-            key={i}
-            type="button"
-            onClick={() => goTo(i)}
-            aria-label={`Xem ảnh ${i + 1}`}
-            aria-current={i === index}
-            className={`h-1.5 rounded-full transition-all ${
-              i === index ? "w-4 bg-accent" : "w-1.5 bg-surface/80 hover:bg-surface"
-            }`}
-          />
-        ))}
-      </div>
+      {/* Chấm chỉ số — bấm để nhảy ảnh. Nhiều slide (hành trình dài) -> ẩn chấm, pill 1/N là đủ. */}
+      {n <= 10 && (
+        <div className="absolute inset-x-0 bottom-2 flex items-center justify-center gap-1.5">
+          {slides.map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => goTo(i)}
+              aria-label={`Xem ảnh ${i + 1}`}
+              aria-current={i === index}
+              className={`h-1.5 rounded-full transition-all ${
+                i === index ? "w-4 bg-accent" : "w-1.5 bg-surface/80 hover:bg-surface"
+              }`}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

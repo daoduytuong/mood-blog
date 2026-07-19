@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getBySlug } from "@/lib/db/posts";
 import { mediaPublicUrl } from "@/lib/storage";
 import { EditForm } from "@/features/compose/EditForm";
+import { JourneyEntryList } from "@/features/journey/JourneyEntryList";
 
 export const dynamic = "force-dynamic"; // chỉ-Tác-giả, đọc cookies -> luôn động
 
@@ -55,6 +56,26 @@ export default async function EditPostPage({
             Ảnh giữ nguyên — chỉ sửa nội dung & tâm trạng
           </span>
         </div>
+      )}
+
+      {post.type === "hanh_trinh" && (
+        <section className="mb-8">
+          <h2 className="mb-3 text-sm text-text-muted">
+            Các chặng ({post.media.length})
+          </h2>
+          <JourneyEntryList
+            postId={post.id}
+            slug={post.slug}
+            entries={post.media
+              .filter((m) => !!m.path)
+              .map((m) => ({
+                path: m.path!,
+                url: mediaPublicUrl(m.path!),
+                date: m.date,
+                note: m.note,
+              }))}
+          />
+        </section>
       )}
 
       <EditForm

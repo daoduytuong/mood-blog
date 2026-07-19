@@ -32,6 +32,7 @@ async function uniqueSlug(
 }
 
 const MAX_IMAGES = 10;
+const MAX_JOURNEY_ENTRIES = 200; // hành trình dài hơi (vd gym ~2 năm, 2-3 chặng/tuần)
 
 // Khử media ảnh từ client (chống tamper): path PHẢI thuộc namespace user; blurDataURL capped.
 function sanitizeImageMedia(raw: unknown, userId: string): MediaItem[] {
@@ -49,6 +50,151 @@ function sanitizeImageMedia(raw: unknown, userId: string): MediaItem[] {
     out.push({ path: r.path, w, h, blurDataURL });
   }
   return out;
+}
+
+// Ghi chú + ngày của một "chặng" hành trình (client gửi; server khử).
+function sanitizeEntryMeta(
+  note: unknown,
+  date: unknown,
+): { note?: string; date: string } {
+  const n = typeof note === "string" ? note.trim().slice(0, 500) : "";
+  const d =
+    typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date)
+      ? date
+      : new Date().toISOString().slice(0, 10);
+  return { note: n || undefined, date: d };
+}
+
+// Hành trình — tạo post + chặng đầu tiên (1 ảnh đã upload client-side).
+export async function createJourney(
+  _prev: ComposeState,
+  formData: FormData,
+): Promise<ComposeState> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Bạn cần đăng nhập đã nhé." };
+
+  const caption = String(formData.get("caption") ?? "").trim();
+  const mood = String(formData.get("mood") ?? "");
+  if (!MOOD_CODES.includes(mood as MoodCode))
+    return { error: "Chọn một tâm trạng giúp mình nhé." };
+
+  let media: MediaItem[] = [];
+  try {
+    media = sanitizeImageMedia(JSON.parse(String(formData.get("media") ?? "[]")), user.id);
+  } catch {
+    media = [];
+  }
+  if (media.length === 0)
+    return { error: "Thêm một tấm ảnh cho chặng đầu tiên nhé." };
+
+  const meta = sanitizeEntryMeta(formData.get("note"), formData.get("date"));
+  const entry: MediaItem = { ...media[0], ...meta };
+
+  const slug = await uniqueSlug(supabase, caption, "hanh-trinh");
+  try {
+    await createPost(supabase, {
+      authorId: user.id,
+      type: "hanh_trinh",
+      mood: mood as MoodCode,
+      slug,
+      caption: caption || null,
+      media: [entry],
+    });
+  } catch {
+    if (entry.path) await supabase.storage.from("media").remove([entry.path]);
+    return { error: "Chưa lưu được bài, thử lại nhé." };
+  }
+  redirect(`/m/${slug}`);
+}
+
+// Hành trình — thêm một chặng (append vào media; KHÔNG đổi slug/mood/caption).
+export async function addJourneyEntry(
+  _prev: ComposeState,
+  formData: FormData,
+): Promise<ComposeState> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Bạn cần đăng nhập đã nhé." };
+
+  const id = String(formData.get("id") ?? "");
+  const slug = String(formData.get("slug") ?? "");
+  if (!id || !slug) return { error: "Thiếu thông tin bài, thử lại nhé." };
+
+  let media: MediaItem[] = [];
+  try {
+    media = sanitizeImageMedia(JSON.parse(String(formData.get("media") ?? "[]")), user.id);
+  } catch {
+    media = [];
+  }
+  if (media.length === 0) return { error: "Thêm một tấm ảnh nhé." };
+
+  const cleanup = async () => {
+    const paths = media.map((m) => m.path).filter((p): p is string => !!p);
+    if (paths.length) await supabase.storage.from("media").remove(paths);
+  };
+
+  const existing = await getBySlug(supabase, slug);
+  if (!existing || existing.id !== id || existing.authorId !== user.id) {
+    await cleanup();
+    return { error: "Không tìm thấy bài." };
+  }
+  if (existing.type !== "hanh_trinh") {
+    await cleanup();
+    return { error: "Bài này không phải hành trình." };
+  }
+  if (existing.media.length >= MAX_JOURNEY_ENTRIES) {
+    await cleanup();
+    return { error: "Hành trình này đã đầy — mở một hành trình mới nhé." };
+  }
+
+  const meta = sanitizeEntryMeta(formData.get("note"), formData.get("date"));
+  const entry: MediaItem = { ...media[0], ...meta };
+
+  try {
+    await updatePost(supabase, id, { media: [...existing.media, entry] });
+  } catch {
+    await cleanup();
+    return { error: "Chưa lưu được, thử lại nhé." };
+  }
+
+  revalidatePath("/");
+  revalidatePath(`/m/${slug}`);
+  redirect(`/m/${slug}`);
+}
+
+// Hành trình — gỡ một chặng (nhận diện bằng path duy nhất; dọn Storage).
+export async function removeJourneyEntry(formData: FormData): Promise<void> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const id = String(formData.get("id") ?? "");
+  const slug = String(formData.get("slug") ?? "");
+  const path = String(formData.get("path") ?? "");
+
+  const existing = slug ? await getBySlug(supabase, slug) : null;
+  if (
+    !existing ||
+    existing.id !== id ||
+    existing.authorId !== user.id ||
+    existing.type !== "hanh_trinh" ||
+    !path
+  )
+    redirect(`/m/${slug}/edit`);
+
+  const next = existing.media.filter((m) => m.path !== path);
+  if (next.length !== existing.media.length) {
+    try {
+      await updatePost(supabase, id, { media: next });
+    } catch {
+      redirect(`/m/${slug}/edit`);
+    }
+    await supabase.storage.from("media").remove([path]); // best-effort sau khi DB đã gọn
+    revalidatePath("/");
+    revalidatePath(`/m/${slug}`);
+  }
+  redirect(`/m/${slug}/edit`);
 }
 
 // Khoảnh khắc ẢNH (1..N) — ảnh đã được client upload lên Storage; action chỉ insert post.
