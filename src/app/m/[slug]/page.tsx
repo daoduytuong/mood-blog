@@ -11,6 +11,7 @@ import { MoodKicker } from "@/components/post/MoodBar";
 import { formatPostDate } from "@/lib/date";
 import { MOODS } from "@/lib/moods";
 import { PostAuthorActions } from "@/components/post/PostAuthorActions";
+import { POST_TYPE_LABEL, POST_TYPE_FALLBACK_TITLE } from "@/lib/post-type";
 import { ShareButton } from "@/components/post/ShareButton";
 import { HeartButton } from "@/features/hearts/HeartButton";
 import { Gallery } from "@/components/ui/Gallery";
@@ -36,9 +37,7 @@ export async function generateMetadata({
   if (!post) return {};
 
   const title =
-    post.caption ||
-    post.excerpt ||
-    (post.type === "khoanh_khac" ? "Một khoảnh khắc" : "Một góc đọc");
+    post.caption || post.excerpt || POST_TYPE_FALLBACK_TITLE[post.type];
   const description =
     (post.excerpt || post.caption || "").slice(0, 200) || undefined;
   const imgPath = post.media[0]?.path;
@@ -75,12 +74,17 @@ export default async function PostDetail({
   const initialComments = await listComments(createPublicClient(), post.id);
 
   const isMoment = post.type === "khoanh_khac";
+  const isJourney = post.type === "hanh_trinh";
   const videoMedia = post.media.find((m) => m.provider === "vimeo" && !!m.video_id);
   const imageItems = post.media.filter((m) => !!m.path);
   const isVideo = !!videoMedia;
   // ratio THẬT từng ảnh (kẹp trần 4:5); thiếu w/h -> undefined (ImageBlur fallback 4/3).
   const ratioOf = (m: (typeof imageItems)[number]) =>
     m.w && m.h ? Math.max(m.w / m.h, 0.8) : undefined;
+  // Hành trình: chặng đánh số theo thứ tự lưu (cũ->mới), hiển thị mới nhất trước.
+  const journeyEntries = imageItems
+    .map((m, i) => ({ m, ordinal: i + 1 }))
+    .reverse();
 
   return (
     <main className="mx-auto w-full max-w-container px-4.5 py-8">
@@ -97,7 +101,7 @@ export default async function PostDetail({
               /
             </span>
             <span className="uppercase tracking-[0.18em]">
-              {isMoment ? "Khoảnh khắc" : "Góc đọc"}
+              {POST_TYPE_LABEL[post.type]}
             </span>
           </div>
           <time dateTime={post.createdAt} className="shrink-0 uppercase tracking-[0.16em]">
@@ -138,8 +142,51 @@ export default async function PostDetail({
             />
           ) : null)}
 
+        {isJourney && (
+          <div className="flex flex-col gap-2">
+            {post.caption && (
+              <h1 className="font-serif text-[1.7rem] leading-[1.35] text-text">
+                {post.caption}
+              </h1>
+            )}
+            <p className="text-sm text-text-muted">
+              {journeyEntries.length === 0
+                ? "Chưa có chặng nào."
+                : `${journeyEntries.length} chặng${
+                    imageItems[0]?.date
+                      ? ` · bắt đầu ${formatPostDate(imageItems[0].date)}`
+                      : ""
+                  }`}
+            </p>
+
+            <div className="mt-4 flex flex-col gap-8">
+              {journeyEntries.map(({ m, ordinal }, idx) => (
+                <section key={m.path} className="flex flex-col gap-3">
+                  <div className="flex items-baseline justify-between text-[11px] uppercase tracking-[0.16em] text-text-muted">
+                    <span>Chặng {ordinal}</span>
+                    {m.date && <span>{formatPostDate(m.date)}</span>}
+                  </div>
+                  <Lightbox
+                    src={mediaPublicUrl(m.path!)}
+                    alt={`${post.caption ?? "Hành trình"} — chặng ${ordinal}`}
+                    sizes="(max-width: 600px) 100vw, 600px"
+                    blurDataURL={m.blurDataURL}
+                    ratio={ratioOf(m)}
+                    priority={idx === 0}
+                  />
+                  {m.note && (
+                    <p className="font-serif leading-relaxed text-text-muted">
+                      {m.note}
+                    </p>
+                  )}
+                </section>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="mt-6 flex flex-col gap-4">
-          {isMoment ? (
+          {isJourney ? null : isMoment ? (
             post.caption && (
               <p className="font-serif text-[1.7rem] leading-[1.35] text-text">
                 {post.caption}
@@ -179,7 +226,7 @@ export default async function PostDetail({
             />
           </div>
 
-          <PostAuthorActions postId={post.id} slug={post.slug} />
+          <PostAuthorActions postId={post.id} slug={post.slug} type={post.type} />
         </div>
       </article>
 

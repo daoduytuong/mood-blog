@@ -9,7 +9,7 @@ const initial: ComposeState = { error: null };
 export interface EditFormProps {
   id: string;
   slug: string;
-  type: "khoanh_khac" | "goc_doc";
+  type: "khoanh_khac" | "goc_doc" | "hanh_trinh";
   initialMood: MoodCode;
   initialCaption: string;
   initialExcerpt: string;
@@ -17,6 +17,7 @@ export interface EditFormProps {
 }
 
 // Story 1.7 — sửa nội dung + tâm trạng. KHÔNG đổi ảnh, KHÔNG đổi loại, KHÔNG đổi slug.
+// Hành trình sửa như Khoảnh khắc (caption + mood); chặng quản ở JourneyEntryList.
 export function EditForm({
   id,
   slug,
@@ -32,7 +33,7 @@ export function EditForm({
   const [localError, setLocalError] = useState<string | null>(null);
 
   const error = localError ?? state.error;
-  const isMoment = type === "khoanh_khac";
+  const isMoment = type !== "goc_doc"; // hanh_trinh: chỉ caption + mood, như moment
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -80,7 +81,11 @@ export function EditForm({
         rows={3}
         defaultValue={initialCaption}
         placeholder={
-          isMoment ? "Hôm nay bạn thấy thế nào?" : "Vì sao bạn thích điều này?"
+          type === "goc_doc"
+            ? "Vì sao bạn thích điều này?"
+            : type === "hanh_trinh"
+              ? "Hành trình này là gì? (vd: Tập gym)"
+              : "Hôm nay bạn thấy thế nào?"
         }
         className="resize-none rounded-md border border-border bg-surface px-3 py-2 text-text outline-none focus:border-accent"
         style={{ fontFamily: "var(--font-serif)" }}

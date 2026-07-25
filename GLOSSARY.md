@@ -6,6 +6,8 @@ Thuật ngữ thương hiệu giữ tiếng Việt ở UI; định danh code dù
 |---|---|---|
 | Khoảnh khắc | `khoanh_khac` (post_type) / moment | Bài đăng cá nhân: ảnh/video + caption + tâm trạng |
 | Góc đọc | `goc_doc` (post_type) / read | Bài chia sẻ: link/đoạn trích + cảm nhận + tâm trạng |
+| Hành trình | `hanh_trinh` (post_type) / journey | Bài lớn dần theo "chặng" (1 ảnh + ngày + ghi chú/chặng); vd nhật ký gym |
+| Chặng | entry (phần tử trong `media` jsonb) | Một lần ghi của Hành trình: `{path,w,h,blurDataURL,date,note}` |
 | Bài đăng | `posts` (table) / post | Đơn vị nội dung; có 2 loại trên |
 | Tâm trạng | `mood_code` (enum), `src/lib/moods.ts` | Nhãn cảm xúc, 6 giá trị; ánh xạ tới 1 màu |
 | Sắc màu tâm trạng | token `--color-mood-*` | Biểu hiện màu của một tâm trạng |

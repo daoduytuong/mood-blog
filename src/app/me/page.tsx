@@ -17,6 +17,7 @@ import {
   CommentInbox,
   type InboxPost,
 } from "@/features/comments/CommentInbox";
+import { POST_TYPE_FALLBACK_TITLE } from "@/lib/post-type";
 
 // Author-only, dynamic (đọc session + số liệu author-only, KHÔNG cache).
 export const dynamic = "force-dynamic";
@@ -45,10 +46,7 @@ export default async function MePage() {
       p.id,
       {
         slug: p.slug,
-        title:
-          p.caption ||
-          p.excerpt ||
-          (p.type === "khoanh_khac" ? "Một khoảnh khắc" : "Một góc đọc"),
+        title: p.caption || p.excerpt || POST_TYPE_FALLBACK_TITLE[p.type],
       },
     ]),
   );
@@ -106,10 +104,12 @@ export default async function MePage() {
               const title =
                 post.caption ||
                 post.excerpt ||
-                (post.type === "khoanh_khac"
-                  ? "Một khoảnh khắc"
-                  : "Một góc đọc");
-              const media = post.media[0];
+                POST_TYPE_FALLBACK_TITLE[post.type];
+              // Hành trình: thumbnail = chặng mới nhất (phần tử cuối).
+              const media =
+                post.type === "hanh_trinh"
+                  ? post.media[post.media.length - 1]
+                  : post.media[0];
               const imgPath = media?.path;
               const poster = media?.poster_url;
               return (

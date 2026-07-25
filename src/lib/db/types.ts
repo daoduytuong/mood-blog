@@ -2,7 +2,7 @@
 //   npm run gen:types   (supabase gen types typescript --linked > src/lib/db/types.ts)
 import type { MoodCode } from "@/lib/moods";
 
-export type PostType = "khoanh_khac" | "goc_doc";
+export type PostType = "khoanh_khac" | "goc_doc" | "hanh_trinh";
 
 export interface MediaItem {
   // Khoảnh khắc-ảnh: { path, w, h, blurDataURL? }
@@ -15,6 +15,9 @@ export interface MediaItem {
   provider?: "vimeo";
   video_id?: string;
   poster_url?: string;
+  // Hành trình: mỗi phần tử media = 1 "chặng" (entry), thêm 2 field dưới
+  date?: string; // YYYY-MM-DD (giờ VN, do client gửi)
+  note?: string; // ghi chú ngắn của chặng
 }
 
 export interface PostRow {

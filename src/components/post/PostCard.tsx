@@ -10,6 +10,7 @@ import { VideoEmbed } from "@/components/ui/VideoEmbed";
 import { CommentIcon } from "@/components/ui/CommentIcon";
 import { MoodKicker } from "./MoodBar";
 import { HeartButton } from "@/features/hearts/HeartButton";
+import { POST_TYPE_LABEL } from "@/lib/post-type";
 
 const FEED_IMG_SIZES = "(max-width: 600px) calc(100vw - 36px), 564px";
 
@@ -23,11 +24,18 @@ export function PostCard({
   priority?: boolean;
 }) {
   const isMoment = post.type === "khoanh_khac";
+  const isJourney = post.type === "hanh_trinh";
   const videoMedia = post.media.find((m) => m.provider === "vimeo" && !!m.video_id);
   const imageItems = post.media.filter((m) => !!m.path);
   const isVideo = !!videoMedia;
+  // Hành trình: lướt được các chặng, MỚI NHẤT trước (media append theo thời gian -> đảo).
+  const journeySlides = isJourney
+    ? imageItems.map((m, i) => ({ m, ordinal: i + 1 })).reverse()
+    : [];
   const linkText =
-    post.caption ?? post.excerpt ?? (isMoment ? "khoảnh khắc" : "bài viết");
+    post.caption ??
+    post.excerpt ??
+    (isMoment ? "khoảnh khắc" : isJourney ? "hành trình" : "bài viết");
 
   return (
     <article className="group relative py-9 first:pt-3">
@@ -39,8 +47,18 @@ export function PostCard({
             /
           </span>
           <span className="uppercase tracking-[0.18em]">
-            {isMoment ? "Khoảnh khắc" : "Góc đọc"}
+            {POST_TYPE_LABEL[post.type]}
           </span>
+          {isJourney && imageItems.length > 0 && (
+            <>
+              <span aria-hidden className="text-border">
+                ·
+              </span>
+              <span className="tabular-nums uppercase tracking-[0.16em]">
+                {imageItems.length} chặng
+              </span>
+            </>
+          )}
         </div>
         <time dateTime={post.createdAt} className="shrink-0 uppercase tracking-[0.16em]">
           {formatPostDate(post.createdAt)}
@@ -85,8 +103,44 @@ export function PostCard({
           />
         ) : null)}
 
+      {isJourney &&
+        (journeySlides.length > 1 ? (
+          // Lướt các chặng (mới nhất trước). z-10 để vuốt được (nổi trên stretched-link).
+          <div className="relative z-10">
+            <Gallery ariaLabel={post.caption ?? "Hành trình"}>
+              {journeySlides.map(({ m, ordinal }, idx) => (
+                // Slide bọc Link: CHẠM ảnh mở bài (Gallery nổi trên stretched-link
+                // nên phải tự link); VUỐT vẫn lướt chặng (scroll không bắn click).
+                <Link
+                  key={m.path}
+                  href={`/m/${post.slug}`}
+                  aria-label={`Mở hành trình: ${linkText} (chặng ${ordinal})`}
+                  className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
+                >
+                  <ImageBlur
+                    src={mediaPublicUrl(m.path!)}
+                    alt={`${post.caption ?? "Một hành trình"} (chặng ${ordinal})`}
+                    sizes={FEED_IMG_SIZES}
+                    blurDataURL={m.blurDataURL}
+                    priority={priority && idx === 0}
+                  />
+                </Link>
+              ))}
+            </Gallery>
+          </div>
+        ) : journeySlides[0]?.m.path ? (
+          // 1 chặng: dưới stretched-link → chạm mở chi tiết (như 1-ảnh).
+          <ImageBlur
+            src={mediaPublicUrl(journeySlides[0].m.path)}
+            alt={`${post.caption ?? "Một hành trình"} (chặng 1)`}
+            sizes={FEED_IMG_SIZES}
+            blurDataURL={journeySlides[0].m.blurDataURL}
+            priority={priority}
+          />
+        ) : null)}
+
       <div className="mt-5 flex flex-col gap-3">
-        {isMoment ? (
+        {isMoment || isJourney ? (
           post.caption && (
             <ExpandableText
               text={post.caption}
