@@ -74,7 +74,7 @@ export function VideoEmbed({
           <button
             type="button"
             onClick={unmute}
-            className="absolute right-3 top-3 z-10 flex items-center gap-1.5 rounded-full bg-surface/90 px-3 py-1.5 text-xs text-text shadow-[0_4px_20px_rgba(62,74,83,0.12)] transition-colors hover:bg-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="absolute right-3 top-3 z-10 flex items-center gap-1.5 rounded-full bg-surface/90 px-3 py-1.5 text-xs text-text shadow-soft transition-colors hover:bg-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             <svg
               viewBox="0 0 24 24"
@@ -114,7 +114,7 @@ export function VideoEmbed({
         />
       )}
       <span className="absolute inset-0 flex items-center justify-center">
-        <span className="flex h-14 w-14 items-center justify-center rounded-full bg-surface/85 text-text shadow-[0_4px_20px_rgba(62,74,83,0.12)]">
+        <span className="flex h-14 w-14 items-center justify-center rounded-full bg-surface/85 text-text shadow-soft">
           <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden fill="currentColor">
             <path d="M8 5.5v13l11-6.5z" />
           </svg>

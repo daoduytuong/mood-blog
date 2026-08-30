@@ -12,8 +12,8 @@ export function brandIcon(size: number) {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#A6492B",
-          color: "#FBF7EF",
+          background: "#3897F0",
+          color: "#FFFFFF",
           fontSize: Math.round(size * 0.62),
           fontWeight: 600,
         }}

@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Playfair_Display, Be_Vietnam_Pro } from "next/font/google";
+import { Lobster, Be_Vietnam_Pro } from "next/font/google";
 import Link from "next/link";
 import Script from "next/script";
 import { AuthorNav } from "@/components/AuthorNav";
@@ -7,9 +7,10 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { env } from "@/env";
 import "./globals.css";
 
-const playfair = Playfair_Display({
-  variable: "--font-playfair",
+const lobster = Lobster({
+  variable: "--font-lobster",
   subsets: ["latin", "vietnamese"],
+  weight: "400",
   display: "swap",
 });
 
@@ -27,7 +28,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#F4EEE2",
+  themeColor: "#FAFAFA",
 };
 
 export default function RootLayout({
@@ -38,7 +39,7 @@ export default function RootLayout({
   return (
     <html
       lang="vi"
-      className={`${playfair.variable} ${beVietnam.variable} h-full antialiased`}
+      className={`${lobster.variable} ${beVietnam.variable} h-full antialiased`}
     >
       <body className="min-h-full">
         <script
@@ -50,7 +51,7 @@ export default function RootLayout({
         {/* Header dính + kính mờ: luôn có lối về, không che nội dung. */}
         <header className="sticky top-0 z-40 border-b border-border bg-background/75 backdrop-blur-sm">
           <div className="mx-auto flex w-full max-w-container items-center justify-between px-4.5 py-4">
-            <Link href="/" className="font-serif text-text">
+            <Link href="/" className="font-display text-xl text-text">
               khoảnh khắc của tôi
             </Link>
             <div className="flex items-center gap-3">

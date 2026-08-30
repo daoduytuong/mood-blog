@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ImageBlur } from "./ImageBlur";
 
 // Xem ảnh lớn: chạm ảnh -> overlay full-screen (fade tĩnh, Esc/× đóng, khóa cuộn).
-// Chỉ ảnh. KHÔNG pinch-zoom, KHÔNG double-tap-like.
+// Chỉ ảnh, KHÔNG pinch-zoom. (Double-tap-like ở feed do DoubleTapMedia đảm nhận.)
 export function Lightbox({
   src,
   alt,

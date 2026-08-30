@@ -38,16 +38,17 @@ export async function removeHeart(
 }
 
 /**
- * Đếm tổng tim cho MỘT bài — author-only (RLS hearts_author_read).
- * Người xem anon nhận 0 vì RLS chặn SELECT.
+ * Đếm tổng tim CÔNG KHAI cho MỘT bài — qua view heart_counts (migration 0010),
+ * anon dùng được (chỉ lộ aggregate, không lộ anon_id). Bài chưa publish -> 0.
  */
 export async function countForPost(sb: DB, postId: string): Promise<number> {
-  const { count, error } = await sb
-    .from("hearts")
-    .select("*", { count: "exact", head: true })
-    .eq("post_id", postId);
-  if (error || count == null) return 0;
-  return count;
+  const { data, error } = await sb
+    .from("heart_counts")
+    .select("heart_count")
+    .eq("post_id", postId)
+    .maybeSingle();
+  if (error || !data) return 0;
+  return (data as { heart_count: number }).heart_count;
 }
 
 /**

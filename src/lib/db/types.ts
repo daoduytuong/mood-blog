@@ -40,6 +40,12 @@ export interface HeartRow {
   created_at: string;
 }
 
+// View công khai (migration 0010): chỉ tổng tim, KHÔNG lộ anon_id.
+export interface HeartCountRow {
+  post_id: string;
+  heart_count: number;
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -68,7 +74,9 @@ export interface Database {
         Relationships: [];
       };
     };
-    Views: { [_ in never]: never };
+    Views: {
+      heart_counts: { Row: HeartCountRow; Relationships: [] };
+    };
     Functions: { [_ in never]: never };
     Enums: {
       post_type: PostType;
