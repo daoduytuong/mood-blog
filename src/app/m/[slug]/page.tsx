@@ -7,13 +7,14 @@ import { listComments } from "@/lib/db/comments";
 import { mediaPublicUrl } from "@/lib/storage";
 import { siteUrl } from "@/lib/site";
 import { Lightbox } from "@/components/ui/Lightbox";
-import { MoodKicker } from "@/components/post/MoodBar";
+import { MoodAvatar } from "@/components/post/MoodAvatar";
 import { formatPostDate } from "@/lib/date";
 import { MOODS } from "@/lib/moods";
 import { PostAuthorActions } from "@/components/post/PostAuthorActions";
 import { POST_TYPE_LABEL, POST_TYPE_FALLBACK_TITLE } from "@/lib/post-type";
 import { ShareButton } from "@/components/post/ShareButton";
 import { HeartButton } from "@/features/hearts/HeartButton";
+import { LikeCount } from "@/features/hearts/LikeCount";
 import { Gallery } from "@/components/ui/Gallery";
 import { VideoEmbed } from "@/components/ui/VideoEmbed";
 import { CommentSection } from "@/features/comments/CommentSection";
@@ -57,7 +58,6 @@ export async function generateMetadata({
       ...(images ? { images } : {}),
     },
     twitter: { card: "summary_large_image", title, description },
-    // Tổng tim KHÔNG bao giờ xuất hiện trong metadata/OG (chỉ /me author thấy).
   };
 }
 
@@ -93,18 +93,21 @@ export default async function PostDetail({
       </Link>
 
       <article className="relative mt-6">
-        {/* Kicker editorial: tâm trạng (màu) / loại · ngày */}
-        <div className="mb-5 flex items-center justify-between gap-3 text-[11px] text-text-muted">
-          <div className="flex items-center gap-2.5">
-            <MoodKicker mood={post.mood} />
-            <span aria-hidden className="text-border">
-              /
+        {/* Header "Nguyên bản" (đồng bộ PostCard): mood-avatar + nhãn mood + loại · ngày */}
+        <div className="mb-5 flex items-center gap-3">
+          <MoodAvatar mood={post.mood} />
+          <div className="flex min-w-0 flex-col">
+            <span className="text-[13px] font-semibold lowercase leading-tight text-text">
+              {MOODS[post.mood].label}
             </span>
-            <span className="uppercase tracking-[0.18em]">
+            <span className="text-[11px] leading-tight text-text-muted">
               {POST_TYPE_LABEL[post.type]}
             </span>
           </div>
-          <time dateTime={post.createdAt} className="shrink-0 uppercase tracking-[0.16em]">
+          <time
+            dateTime={post.createdAt}
+            className="ml-auto shrink-0 text-[11px] text-text-muted"
+          >
             {formatPostDate(post.createdAt)}
           </time>
         </div>
@@ -218,12 +221,15 @@ export default async function PostDetail({
             </>
           )}
 
-          <div className="flex items-center gap-1 pt-2">
-            <HeartButton postId={post.id} />
-            <ShareButton
-              slug={post.slug}
-              title={post.caption ?? post.excerpt ?? undefined}
-            />
+          <div className="flex flex-col gap-1 pt-2">
+            <div className="-ml-2.5 flex items-center gap-1">
+              <HeartButton postId={post.id} />
+              <ShareButton
+                slug={post.slug}
+                title={post.caption ?? post.excerpt ?? undefined}
+              />
+            </div>
+            <LikeCount postId={post.id} serverCount={post.heartCount} />
           </div>
 
           <PostAuthorActions postId={post.id} slug={post.slug} type={post.type} />

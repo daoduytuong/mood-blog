@@ -5,7 +5,8 @@ import { PostCard } from "@/components/post/PostCard";
 import { loadMorePosts, getFreshFeed } from "./actions";
 import type { Post } from "@/lib/db/posts";
 
-const STORE_KEY = "feed:cache:v1";
+// v2: Post có thêm heartCount (cache v1 thiếu field -> bỏ, tự hết hạn trong localStorage).
+const STORE_KEY = "feed:cache:v2";
 
 type FeedCache = { posts: Post[]; done: boolean; scrollY: number; ts: number };
 
@@ -128,15 +129,15 @@ export function FeedList({
 
   return (
     <div className="flex flex-col">
-      {/* Editorial: phân cách bài bằng hairline (không hộp thẻ). */}
-      <div className="divide-y divide-border">
+      {/* "Nguyên bản": card rời trên nền linen; mobile full-bleed (âm margin so với px-4.5 của page). */}
+      <div className="-mx-4.5 flex flex-col gap-3 sm:mx-0 sm:gap-6">
         {posts.map((post, i) => (
           <PostCard key={post.id} post={post} priority={i === 0} />
         ))}
       </div>
 
       {done ? (
-        <p className="self-center py-12 text-center font-serif text-text-muted">
+        <p className="self-center py-12 text-center text-text-muted">
           Hết rồi. Cảm ơn đã ghé.
         </p>
       ) : (
@@ -144,7 +145,7 @@ export function FeedList({
           type="button"
           onClick={more}
           disabled={pending}
-          className="mt-8 self-center rounded-full border border-border px-5 py-2 text-sm text-text-muted transition-colors hover:border-accent hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60"
+          className="mt-6 self-center rounded-sm border border-border bg-surface px-5 py-2 text-[13px] font-semibold text-accent transition-colors hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60"
         >
           {pending ? "Đang mở…" : "Xem thêm"}
         </button>

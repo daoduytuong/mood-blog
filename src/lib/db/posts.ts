@@ -19,10 +19,14 @@ export interface Post {
   isPublished: boolean;
   createdAt: string;
   commentCount: number; // số lời chưa ẩn (từ PostgREST embed; 0 nếu query không kèm)
+  heartCount: number; // tổng tim công khai (view heart_counts; 0 nếu query không kèm)
 }
 
-// Row có thể kèm aggregate `comments(count)` từ PostgREST.
-type PostRowWithCount = PostRow & { comments?: { count: number }[] };
+// Row có thể kèm aggregate `comments(count)` + embed view `heart_counts` từ PostgREST.
+type PostRowWithCount = PostRow & {
+  comments?: { count: number }[];
+  heart_counts?: { heart_count: number }[];
+};
 
 function toPost(r: PostRowWithCount): Post {
   return {
@@ -38,11 +42,36 @@ function toPost(r: PostRowWithCount): Post {
     isPublished: r.is_published,
     createdAt: r.created_at,
     commentCount: r.comments?.[0]?.count ?? 0,
+    heartCount: r.heart_counts?.[0]?.heart_count ?? 0,
   };
 }
 
 // Cột công khai + đếm bình luận chưa ẩn (tôn trọng RLS) cho Feed & chi tiết.
 const FEED_COLS = "*, comments(count)";
+
+/**
+ * Tổng tim công khai từ view heart_counts (migration 0010) — query RIÊNG rồi merge
+ * (không embed vào FEED_COLS: nếu view chưa tồn tại / PostgREST không infer được
+ * quan hệ thì embed làm hỏng CẢ query feed; tách ra thì lỗi chỉ mất số tim -> 0).
+ */
+async function withHeartCounts(sb: DB, posts: Post[]): Promise<Post[]> {
+  if (posts.length === 0) return posts;
+  const { data, error } = await sb
+    .from("heart_counts")
+    .select("post_id, heart_count")
+    .in(
+      "post_id",
+      posts.map((p) => p.id),
+    );
+  if (error || !data) return posts; // im lặng: feed vẫn sống, số tim = 0
+  const counts = new Map(
+    (data as { post_id: string; heart_count: number }[]).map((r) => [
+      r.post_id,
+      r.heart_count,
+    ]),
+  );
+  return posts.map((p) => ({ ...p, heartCount: counts.get(p.id) ?? 0 }));
+}
 
 export interface NewPost {
   authorId: string;
@@ -64,7 +93,7 @@ export async function listPublished(sb: DB): Promise<Post[]> {
     .order("created_at", { ascending: false })
     .order("id", { ascending: false });
   if (error || !data) return [];
-  return data.map(toPost);
+  return withHeartCounts(sb, data.map(toPost));
 }
 
 /** Con trỏ phân trang keyset (không trùng/không nhảy như offset). */
@@ -98,7 +127,7 @@ export async function listPublishedPage(
       console.error("[listPublishedPage]", error.code, error.message, error.details, error.hint);
     return [];
   }
-  return data.map(toPost);
+  return withHeartCounts(sb, data.map(toPost));
 }
 
 /** Mọi bài của Tác giả (cho /me). RLS posts_author_all cho phép. Defensive: lỗi -> []. */
@@ -121,7 +150,8 @@ export async function getBySlug(sb: DB, slug: string): Promise<Post | null> {
     .eq("is_published", true)
     .maybeSingle();
   if (error || !data) return null;
-  return toPost(data);
+  const [post] = await withHeartCounts(sb, [toPost(data)]);
+  return post;
 }
 
 /** Mọi slug đã publish (cho generateStaticParams). */

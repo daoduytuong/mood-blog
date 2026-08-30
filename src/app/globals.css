@@ -1,19 +1,21 @@
 @import "tailwindcss";
 
 /*
-  Design system "Ấn bản" — nguồn chân lý token ở DESIGN.md.
-  Light + dark ('giấy'/'mực'). Toggle qua class .dark trên <html>.
+  Design system "Nguyên bản" — phong cách Instagram sơ khai (2010–2012):
+  nền linen, card trắng viền 1px, accent xanh IG. Light + dark, toggle qua class .dark trên <html>.
   Màu tâm trạng: dùng qua src/lib/moods.ts (mood_code -> tokenVar), KHÔNG hardcode hex nơi khác.
+  (DESIGN.md trong _bmad-output mô tả hệ "Ấn bản" cũ — token hiện hành là file này.)
 */
 @theme {
   /* Trung tính & điểm nhấn */
-  --color-background: #F4EEE2;
-  --color-surface:    #FBF7EF;
-  --color-text:       #211C15;
-  --color-text-muted: #6B6357;
-  --color-border:     #D9CFBD;
-  --color-accent:     #A6492B;
-  --color-on-accent:  #FBF7EF;
+  --color-background: #FAFAFA;
+  --color-surface:    #FFFFFF;
+  --color-text:       #262626;
+  --color-text-muted: #737373; /* KHÔNG dùng #8E8E8E của IG — fail AA trên nền trắng */
+  --color-border:     #DBDBDB;
+  --color-accent:     #3897F0; /* xanh IG — dùng cho icon/fill/nút; text nhỏ dùng text-muted */
+  --color-on-accent:  #FFFFFF;
+  --color-like:       #ED4956; /* tim đã thả (accent giờ là xanh) */
 
   /* 6 sắc màu tâm trạng */
   --color-mood-hoai-niem: #B07A6E;
@@ -23,33 +25,35 @@
   --color-mood-tram-tu:   #6F6F9C;
   --color-mood-co-don:    #7C8893;
 
-  /* Font (gán từ next/font ở layout.tsx) */
-  --font-serif: var(--font-playfair);
+  /* Font (gán từ next/font ở layout.tsx).
+     --font-serif là shim: trỏ về sans để code cũ dùng font-serif tự về sans. */
+  --font-display: var(--font-lobster);
+  --font-serif: var(--font-be-vietnam);
   --font-sans:  var(--font-be-vietnam);
 
-  /* Bo góc */
-  --radius-sm: 0.5rem;
-  --radius-md: 0.75rem;
-  --radius-lg: 1rem;
+  /* Bo góc (chrome IG sắc cạnh) */
+  --radius-sm: 0.1875rem;
+  --radius-md: 0.25rem;
+  --radius-lg: 0.5rem;
 
   /* Bóng đổ (tĩnh — KHÔNG bóng-nở khi hover) */
-  --shadow-card: 0 4px 20px rgba(62, 74, 83, 0.06);
-  --shadow-soft: 0 4px 20px rgba(62, 74, 83, 0.12);
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.08);
 
   /* Bố cục */
-  --spacing-container: 600px; /* chiều rộng tối đa một cột */
+  --spacing-container: 600px; /* chiều rộng tối đa một cột (feed IG cũ ~612px) */
 }
 
 @custom-variant dark (&:where(.dark, .dark *));
 
 .dark {
-  --color-background: #14110B;
-  --color-surface:    #1D1910;
-  --color-text:       #ECE3D1;
-  --color-text-muted: #9A9079;
-  --color-border:     #322C20;
-  --color-accent:     #DB7551;
-  --color-on-accent:  #1D1910;
+  --color-background: #0E0E0E;
+  --color-surface:    #1A1A1A;
+  --color-text:       #F1F1F1;
+  --color-text-muted: #A0A0A0;
+  --color-border:     #2E2E2E;
+  --color-accent:     #4DA3F5;
+  --color-on-accent:  #0E0E0E;
+  --color-like:       #F16D75;
 
   --color-mood-hoai-niem: #CE9587;
   --color-mood-binh-yen:  #8FBCAE;
@@ -84,5 +88,21 @@ html {
   }
   to {
     opacity: 1;
+  }
+}
+
+/* Tim double-tap: hiện nhanh rồi tan — gác sau motion-safe ở nơi dùng. */
+@keyframes heartPop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  25% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
   }
 }

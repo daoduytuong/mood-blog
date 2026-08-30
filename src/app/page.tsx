@@ -20,7 +20,7 @@ export default async function Home() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-container px-4.5 py-8">
+    <main className="mx-auto w-full max-w-container px-4.5 py-4 sm:py-8">
       <FeedList initial={posts} pageSize={PAGE_SIZE} />
     </main>
   );

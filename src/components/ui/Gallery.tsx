@@ -85,7 +85,9 @@ export function Gallery({
               aria-label={`Xem ảnh ${i + 1}`}
               aria-current={i === index}
               className={`h-1.5 rounded-full transition-all ${
-                i === index ? "w-4 bg-accent" : "w-1.5 bg-surface/80 hover:bg-surface"
+                i === index
+                  ? "w-4 bg-accent"
+                  : "w-1.5 bg-surface/70 ring-1 ring-border/50 hover:bg-surface"
               }`}
             />
           ))}

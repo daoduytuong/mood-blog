@@ -10,11 +10,13 @@ export function ExpandableText({
   clampClass,
   className = "",
   as = "p",
+  prefix,
 }: {
   text: string;
   clampClass: string; // vd "line-clamp-3"
   className?: string;
   as?: "p" | "blockquote";
+  prefix?: React.ReactNode; // vd nhãn mood in đậm đứng đầu caption (kiểu IG "username caption")
 }) {
   const ref = useRef<HTMLElement | null>(null);
   const [expanded, setExpanded] = useState(false);
@@ -34,10 +36,12 @@ export function ExpandableText({
     <div>
       {as === "blockquote" ? (
         <blockquote ref={setRef} className={cls}>
+          {prefix}
           {text}
         </blockquote>
       ) : (
         <p ref={setRef} className={cls}>
+          {prefix}
           {text}
         </p>
       )}
