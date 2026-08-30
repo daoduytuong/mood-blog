@@ -11,7 +11,6 @@ export function Lightbox({
   sizes,
   blurDataURL,
   ratio,
-  fit,
   priority,
 }: {
   src: string;
@@ -19,7 +18,6 @@ export function Lightbox({
   sizes: string;
   blurDataURL?: string;
   ratio?: number;
-  fit?: "cover" | "contain";
   priority?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -54,7 +52,6 @@ export function Lightbox({
           sizes={sizes}
           blurDataURL={blurDataURL}
           ratio={ratio}
-          fit={fit}
           priority={priority}
         />
       </button>
