@@ -209,9 +209,6 @@ export function PostCard({
               text={post.caption}
               clampClass="line-clamp-3"
               className="text-[14px] leading-snug text-text"
-              prefix={
-                <span className="font-semibold lowercase">{moodLabel} </span>
-              }
             />
           )}
           {!isMoment && !isJourney && post.caption && (
