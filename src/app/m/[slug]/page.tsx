@@ -82,6 +82,11 @@ export default async function PostDetail({
   // thiếu w/h (bài cũ) -> undefined (ImageBlur fallback 4/3).
   const ratioOf = (m: (typeof imageItems)[number]) =>
     m.w && m.h ? m.w / m.h : undefined;
+  // Carousel nhiều ảnh: khung chung = ảnh cao nhất -> track không sinh khoảng trống.
+  const detailRatios = imageItems.map(ratioOf);
+  const sharedRatio = detailRatios.every((r) => r !== undefined)
+    ? Math.min(...(detailRatios as number[]))
+    : undefined;
   // Hành trình: chặng đánh số theo thứ tự lưu (cũ->mới), hiển thị mới nhất trước.
   const journeyEntries = imageItems
     .map((m, i) => ({ m, ordinal: i + 1 }))
@@ -130,7 +135,8 @@ export default async function PostDetail({
                   alt={`${post.caption ?? "Một khoảnh khắc"} (ảnh ${i + 1})`}
                   sizes="(max-width: 600px) 100vw, 600px"
                   blurDataURL={m.blurDataURL}
-                  ratio={ratioOf(m)}
+                  ratio={sharedRatio}
+                  fit="contain"
                   priority={i === 0}
                 />
               ))}

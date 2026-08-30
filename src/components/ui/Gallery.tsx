@@ -57,7 +57,7 @@ export function Gallery({
         onScroll={onScroll}
         onKeyDown={onKey}
         tabIndex={0}
-        className="flex snap-x snap-mandatory items-center overflow-x-auto overscroll-x-contain [scrollbar-width:none] focus:outline-none [&::-webkit-scrollbar]:hidden"
+        className="flex snap-x snap-mandatory overflow-x-auto overscroll-x-contain [scrollbar-width:none] focus:outline-none [&::-webkit-scrollbar]:hidden"
       >
         {slides.map((slide, i) => (
           <div key={i} className="w-full shrink-0 snap-center">

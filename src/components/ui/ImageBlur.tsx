@@ -9,6 +9,8 @@ export interface ImageBlurProps {
   aspect?: string;
   /** Tỉ lệ ảnh THẬT (w/h) — nếu có, dùng aspect-ratio inline thay class (vd trang chi tiết). */
   ratio?: number;
+  /** cover (mặc định): lấp khung. contain: trọn ảnh trong khung (letterbox — carousel nhiều ảnh khác tỉ lệ). */
+  fit?: "cover" | "contain";
   priority?: boolean;
 }
 
@@ -21,6 +23,7 @@ export function ImageBlur({
   blurDataURL,
   aspect = "aspect-4/3",
   ratio,
+  fit = "cover",
   priority = false,
 }: ImageBlurProps) {
   return (
@@ -36,7 +39,7 @@ export function ImageBlur({
         priority={priority}
         placeholder={blurDataURL ? "blur" : "empty"}
         blurDataURL={blurDataURL}
-        className="object-cover"
+        className={fit === "contain" ? "object-contain" : "object-cover"}
       />
     </div>
   );
