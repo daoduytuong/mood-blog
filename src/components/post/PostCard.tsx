@@ -40,6 +40,16 @@ export function PostCard({
     post.caption ??
     post.excerpt ??
     (isMoment ? "khoảnh khắc" : isJourney ? "hành trình" : "bài viết");
+  // Tỉ lệ THẬT của ảnh (không crop, height linh hoạt). Bài cũ thiếu w/h -> undefined
+  // (ImageBlur fallback khung 4/3 chống giật layout).
+  const ratioOf = (m: (typeof imageItems)[number]) =>
+    m.w && m.h ? m.w / m.h : undefined;
+  // Carousel nhiều ảnh: KHUNG CHUNG = tỉ lệ ảnh CAO nhất (min w/h) -> mọi slide cao
+  // bằng nhau, track không sinh khoảng trống; ảnh thấp hơn contain + nền blur (ImageBlur).
+  const ratios = imageItems.map(ratioOf);
+  const sharedRatio = ratios.every((r) => r !== undefined)
+    ? Math.min(...(ratios as number[]))
+    : undefined;
   const href = `/m/${post.slug}`;
   const moodLabel = MOODS[post.mood].label;
   const typeLine = isJourney
@@ -95,7 +105,8 @@ export function PostCard({
                       alt={`${post.caption ?? "Một khoảnh khắc"} (ảnh ${i + 1})`}
                       sizes={FEED_IMG_SIZES}
                       blurDataURL={m.blurDataURL}
-                      aspect="aspect-square"
+                      ratio={sharedRatio}
+                      fit="contain"
                       priority={priority && i === 0}
                     />
                   </DoubleTapMedia>
@@ -113,7 +124,7 @@ export function PostCard({
                 alt={post.caption ?? "Một khoảnh khắc"}
                 sizes={FEED_IMG_SIZES}
                 blurDataURL={imageItems[0].blurDataURL}
-                aspect="aspect-square"
+                ratio={ratioOf(imageItems[0])}
                 priority={priority}
               />
             </DoubleTapMedia>
@@ -135,7 +146,8 @@ export function PostCard({
                       alt={`${post.caption ?? "Một hành trình"} (chặng ${ordinal})`}
                       sizes={FEED_IMG_SIZES}
                       blurDataURL={m.blurDataURL}
-                      aspect="aspect-square"
+                      ratio={sharedRatio}
+                      fit="contain"
                       priority={priority && idx === 0}
                     />
                   </DoubleTapMedia>
@@ -153,7 +165,7 @@ export function PostCard({
                 alt={`${post.caption ?? "Một hành trình"} (chặng 1)`}
                 sizes={FEED_IMG_SIZES}
                 blurDataURL={journeySlides[0].m.blurDataURL}
-                aspect="aspect-square"
+                ratio={ratioOf(journeySlides[0].m)}
                 priority={priority}
               />
             </DoubleTapMedia>
