@@ -78,9 +78,10 @@ export default async function PostDetail({
   const videoMedia = post.media.find((m) => m.provider === "vimeo" && !!m.video_id);
   const imageItems = post.media.filter((m) => !!m.path);
   const isVideo = !!videoMedia;
-  // ratio THẬT từng ảnh (kẹp trần 4:5); thiếu w/h -> undefined (ImageBlur fallback 4/3).
+  // ratio THẬT từng ảnh (KHÔNG kẹp — hiển thị đúng khung gốc, height linh hoạt);
+  // thiếu w/h (bài cũ) -> undefined (ImageBlur fallback 4/3).
   const ratioOf = (m: (typeof imageItems)[number]) =>
-    m.w && m.h ? Math.max(m.w / m.h, 0.8) : undefined;
+    m.w && m.h ? m.w / m.h : undefined;
   // Hành trình: chặng đánh số theo thứ tự lưu (cũ->mới), hiển thị mới nhất trước.
   const journeyEntries = imageItems
     .map((m, i) => ({ m, ordinal: i + 1 }))
