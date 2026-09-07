@@ -17,6 +17,8 @@ import type { MediaItem } from "@/lib/db/types";
 
 export interface ComposeState {
   error: string | null;
+  /** Đã lưu xong — cho form inline tự đóng (action không redirect). */
+  ok?: boolean;
 }
 
 // Slug duy nhất từ một chuỗi gợi ý (kiểm DB).
@@ -161,6 +163,77 @@ export async function addJourneyEntry(
   revalidatePath("/");
   revalidatePath(`/m/${slug}`);
   redirect(`/m/${slug}`);
+}
+
+// Hành trình — SỬA một chặng: đổi ảnh (tuỳ chọn) + ngày + ghi chú.
+// Nhận diện chặng bằng path CŨ; thay TẠI CHỖ để không đổi thứ tự ("Chặng N" giữ số).
+// Ảnh mới đã được client upload lên Storage (như addJourneyEntry); ảnh cũ dọn sau khi DB đã trỏ ảnh mới.
+export async function updateJourneyEntry(
+  _prev: ComposeState,
+  formData: FormData,
+): Promise<ComposeState> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Bạn cần đăng nhập đã nhé." };
+
+  const id = String(formData.get("id") ?? "");
+  const slug = String(formData.get("slug") ?? "");
+  const path = String(formData.get("path") ?? ""); // chặng đang sửa
+  if (!id || !slug || !path)
+    return { error: "Thiếu thông tin chặng, thử lại nhé." };
+
+  // Ảnh mới là TUỲ CHỌN: mảng rỗng = giữ ảnh cũ, chỉ sửa ngày/ghi chú.
+  let media: MediaItem[] = [];
+  try {
+    media = sanitizeImageMedia(JSON.parse(String(formData.get("media") ?? "[]")), user.id);
+  } catch {
+    media = [];
+  }
+  const replacement = media[0];
+
+  // Lỗi giữa đường -> dọn ảnh mới vừa upload (tránh rác Storage).
+  const cleanupNew = async () => {
+    if (replacement?.path)
+      await supabase.storage.from("media").remove([replacement.path]);
+  };
+
+  const existing = await getBySlug(supabase, slug);
+  if (!existing || existing.id !== id || existing.authorId !== user.id) {
+    await cleanupNew();
+    return { error: "Không tìm thấy bài." };
+  }
+  if (existing.type !== "hanh_trinh") {
+    await cleanupNew();
+    return { error: "Bài này không phải hành trình." };
+  }
+  const idx = existing.media.findIndex((m) => m.path === path);
+  if (idx === -1) {
+    await cleanupNew();
+    return { error: "Không tìm thấy chặng này." };
+  }
+
+  const current = existing.media[idx];
+  const meta = sanitizeEntryMeta(
+    formData.get("note"),
+    formData.get("date") || current.date,
+  );
+  const next = [...existing.media];
+  next[idx] = replacement ? { ...replacement, ...meta } : { ...current, ...meta };
+
+  try {
+    await updatePost(supabase, id, { media: next });
+  } catch {
+    await cleanupNew();
+    return { error: "Chưa lưu được, thử lại nhé." };
+  }
+
+  // DB đã trỏ ảnh mới -> gỡ ảnh cũ (best-effort, hụt cũng không hỏng bài).
+  if (replacement && current.path)
+    await supabase.storage.from("media").remove([current.path]);
+
+  revalidatePath("/");
+  revalidatePath(`/m/${slug}`);
+  return { error: null, ok: true };
 }
 
 // Hành trình — gỡ một chặng (nhận diện bằng path duy nhất; dọn Storage).

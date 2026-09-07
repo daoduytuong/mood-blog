@@ -60,9 +60,12 @@ export default async function EditPostPage({
 
       {post.type === "hanh_trinh" && (
         <section className="mb-8">
-          <h2 className="mb-3 text-sm text-text-muted">
+          <h2 className="mb-1 text-sm text-text">
             Các chặng ({post.media.length})
           </h2>
+          <p className="mb-3 text-xs text-text-muted">
+            Bấm “Sửa” để đổi ảnh, ngày hoặc ghi chú của một chặng.
+          </p>
           <JourneyEntryList
             postId={post.id}
             slug={post.slug}
