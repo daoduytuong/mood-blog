@@ -107,6 +107,7 @@ export async function createJourney(
     if (entry.path) await supabase.storage.from("media").remove([entry.path]);
     return { error: "Chưa lưu được bài, thử lại nhé." };
   }
+  revalidatePath("/"); // ISR: bài mới phải xuất hiện ở Feed NGAY, không đợi hết 300s
   redirect(`/m/${slug}`);
 }
 
@@ -309,6 +310,7 @@ export async function createMomentImages(
     if (paths.length) await supabase.storage.from("media").remove(paths);
     return { error: "Chưa lưu được bài, thử lại nhé." };
   }
+  revalidatePath("/"); // ISR: bài mới phải xuất hiện ở Feed NGAY
   redirect("/");
 }
 
@@ -355,6 +357,7 @@ export async function createMomentVideo(
     return { error: "Chưa lưu được bài, thử lại nhé." };
   }
 
+  revalidatePath("/"); // ISR: bài mới phải xuất hiện ở Feed NGAY
   redirect("/");
 }
 
@@ -407,6 +410,7 @@ export async function createGocDoc(
     return { error: "Chưa lưu được bài, thử lại nhé." };
   }
 
+  revalidatePath("/"); // ISR: bài mới phải xuất hiện ở Feed NGAY
   redirect("/");
 }
 

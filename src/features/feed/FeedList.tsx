@@ -10,10 +10,34 @@ const STORE_KEY = "feed:cache:v2";
 
 type FeedCache = { posts: Post[]; done: boolean; scrollY: number; ts: number };
 
+// Cache quá hạn thì bỏ hẳn (thà chờ server một nhịp còn hơn hiện bài rất cũ).
+const CACHE_MAX_AGE_MS = 30 * 60_000;
+
+// So NỘI DUNG hiển thị của một bài (không chỉ id) — để bắt các sửa tại chỗ:
+// đổi ảnh/thêm-gỡ chặng (media), sửa caption/trích, đổi mood, số tim/bình luận đổi.
+function samePost(a: Post, b: Post): boolean {
+  return (
+    a.id === b.id &&
+    a.caption === b.caption &&
+    a.excerpt === b.excerpt &&
+    a.linkUrl === b.linkUrl &&
+    a.mood === b.mood &&
+    a.heartCount === b.heartCount &&
+    a.commentCount === b.commentCount &&
+    JSON.stringify(a.media) === JSON.stringify(b.media)
+  );
+}
+
 // Feed CÓ ĐÁY: "Xem thêm" thủ công (keyset) + điểm dừng ấm. KHÔNG vô-tận-cuộn.
 // Cache localStorage (stale-while-revalidate): quay về feed thấy NGAY bản cũ + giữ vị trí cuộn,
-// đồng thời gọi lại API nền. CHỈ thay bằng bản tươi khi đang ở ĐẦU feed (chưa cuộn, chưa mở thêm)
-// -> không "chen" bài mới khi đang đọc giữa chừng (tôn trọng "feed không tự nhảy").
+// đồng thời gọi lại API nền.
+//
+// Quy tắc cache (đã sửa 2 lỗi: bài mới "hiện rồi mất", và sửa ảnh không cập nhật):
+//  1. KHÔNG đè cache lên dữ liệu server: server (ISR, đã revalidate sau mỗi lần đăng/sửa) là
+//     chân lý cho TRANG ĐẦU. Cache chỉ dùng để khôi phục các trang đã "Xem thêm" + vị trí cuộn,
+//     và chỉ khi phần đầu của cache khớp server (cùng bài đầu) -> cache là phần nối dài, không cũ hơn.
+//  2. Làm tươi nền: nếu tập id KHÔNG đổi -> luôn thay tại chỗ (ảnh/caption/số tim mới) vì
+//     không có bài nào chen vào nên không nhảy layout. Chỉ khi tập id ĐỔI mới cần ở đầu feed.
 export function FeedList({
   initial,
   pageSize,
@@ -26,50 +50,90 @@ export function FeedList({
   const [pending, setPending] = useState(false);
   const postsRef = useRef<Post[]>(initial);
   const persistReady = useRef(false);
+  const restored = useRef(false);
+  const lastInitial = useRef<Post[]>(initial);
 
   // Giữ ref đồng bộ (đọc trong callback revalidate async) — cập nhật trong effect, không trong render.
   useEffect(() => {
     postsRef.current = posts;
   }, [posts]);
 
-  // Mount: (1) hiện cache cũ tức thì; (2) gọi lại API nền (SWR).
+  // Server gửi `initial` MỚI (sau revalidatePath khi đăng/sửa bài) -> nhận ngay,
+  // giữ phần đuôi đã "Xem thêm". Server là chân lý, KHÔNG để cache cũ đè lên.
   useEffect(() => {
-    // (1) Cache cũ — giữ cả list đã "Xem thêm" + vị trí cuộn.
-    try {
-      const raw = localStorage.getItem(STORE_KEY);
-      if (raw) {
-        const c = JSON.parse(raw) as FeedCache;
-        if (c.posts?.length) {
-          // eslint-disable-next-line react-hooks/set-state-in-effect -- khôi phục cache 1 lần khi mount (SWR), tránh blank
-          setPosts(c.posts);
-          setDone(c.done);
-          requestAnimationFrame(() => window.scrollTo(0, c.scrollY ?? 0));
+    if (lastInitial.current === initial) return;
+    lastInitial.current = initial;
+    setPosts((cur) =>
+      cur.length > initial.length && cur[0]?.id === initial[0]?.id
+        ? [...initial, ...cur.slice(initial.length)]
+        : initial,
+    );
+  }, [initial]);
+
+  // (1) Khôi phục các trang đã "Xem thêm" — CHỈ MỘT LẦN khi mount.
+  // (2) Làm tươi nền (SWR) — bắt thay đổi xảy ra sau khi trang được ISR-cache.
+  useEffect(() => {
+    // Cache CHỈ để nối dài `initial`, KHÔNG thay thế nó:
+    //   - cache phải mới hơn CACHE_MAX_AGE_MS,
+    //   - bài đầu của cache phải trùng bài đầu server (lệch = server đã có bài mới -> bỏ cache),
+    //   - và phải dài hơn `initial` (người dùng từng bấm "Xem thêm").
+    // Nhờ vậy bài mới đăng không bao giờ bị cache cũ nuốt mất.
+    if (!restored.current) {
+      restored.current = true;
+      try {
+        const raw = localStorage.getItem(STORE_KEY);
+        if (raw) {
+          const c = JSON.parse(raw) as FeedCache;
+          const usable = Date.now() - (c.ts ?? 0) < CACHE_MAX_AGE_MS;
+          const sameHead = c.posts?.[0]?.id === initial[0]?.id;
+          if (usable && sameHead && c.posts.length > initial.length) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect -- khôi phục 1 lần khi mount (SWR)
+            setPosts([...initial, ...c.posts.slice(initial.length)]);
+            setDone(c.done);
+            requestAnimationFrame(() => window.scrollTo(0, c.scrollY ?? 0));
+          } else if (!usable || !sameHead) {
+            localStorage.removeItem(STORE_KEY); // cache lạc hậu -> dọn luôn
+          }
         }
+      } catch {
+        /* im lặng */
       }
-    } catch {
-      /* im lặng */
     }
 
-    // (2) Làm tươi nền. Chỉ thay khi đang ở đầu feed & chưa mở thêm -> không nhảy.
     let alive = true;
     getFreshFeed(pageSize)
       .then((fresh) => {
         if (!alive || fresh.length === 0) return;
         const cur = postsRef.current;
-        const atTop = window.scrollY < 200 && cur.length <= pageSize;
-        const changed = cur[0]?.id !== fresh[0]?.id || cur.length !== fresh.length;
-        if (atTop && changed) {
+        const head = cur.slice(0, fresh.length);
+        const sameIds =
+          head.length === fresh.length &&
+          head.every((p, i) => p.id === fresh[i].id);
+
+        if (sameIds) {
+          // Cùng tập bài, chỉ NỘI DUNG đổi (ảnh chặng, caption, mood, số tim...):
+          // thay tại chỗ — không bài nào chen vào nên feed không nhảy.
+          const changed = head.some(
+            (p, i) => !samePost(p, fresh[i]),
+          );
+          if (changed) setPosts([...fresh, ...cur.slice(fresh.length)]);
+          return;
+        }
+
+        // Tập bài ĐỔI (có bài mới/bị xoá) -> chỉ thay khi đang ở đầu feed & chưa mở thêm,
+        // để không "chen" bài giữa lúc đang đọc.
+        if (window.scrollY < 200 && cur.length <= pageSize) {
           setPosts(fresh);
           setDone(fresh.length < pageSize);
         }
       })
       .catch(() => {
-        /* im lặng — vẫn còn bản cache */
+        /* im lặng — vẫn còn bản đang hiện */
       });
     return () => {
       alive = false;
     };
-  }, [pageSize]);
+  }, [pageSize, initial]);
 
   // Ghi cache khi list đổi (bỏ qua lần đầu để không đè cache trước khi khôi phục).
   useEffect(() => {
