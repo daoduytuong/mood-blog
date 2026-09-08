@@ -45,6 +45,18 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* "Desktop" = có hover thật VÀ có sẵn một con trỏ chính xác.
+   KHÔNG sniff user-agent: iPad Safari khai là macOS, laptop Windows có touch,
+   và SSR không biết thiết bị -> lệch hydration. Media query là CSS thuần nên
+   đúng ngay từ lần sơn đầu, không nhảy layout.
+   Cần CẢ HAI vế, mỗi vế bắt một ca lỗi:
+   - `hover: hover` loại thiết bị touch-primary (điện thoại, iPad, Chrome
+     device mode). Chỉ `any-pointer` là không đủ: nó vẫn khớp vì máy có chuột,
+     làm nút mũi tên hiện đè lên ảnh và chắn cú vuốt.
+   - `any-pointer: fine` cứu laptop Windows màn cảm ứng, nơi `pointer` (thiết
+     bị CHÍNH) bị báo `coarse` dù đang cắm chuột. */
+@custom-variant desktop (@media (hover: hover) and (any-pointer: fine));
+
 .dark {
   --color-background: #0E0E0E;
   --color-surface:    #1A1A1A;
