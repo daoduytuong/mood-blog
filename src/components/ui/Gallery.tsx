@@ -1,10 +1,14 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 // Carousel nhiều ảnh — vuốt tay (scroll-snap gốc) + chấm chỉ số + đếm "1/N".
 // KHÔNG auto-advance (đúng luật "không auto-motion"); cuộn/đổi ảnh là chủ động.
 // Tôn trọng prefers-reduced-motion (bỏ smooth-scroll). 1 slide -> trả thẳng, không chrome.
+//
+// Hai hành vi theo thiết bị (phân biệt bằng capability query `desktop:`, KHÔNG sniff UA):
+// - Desktop (chuột/trackpad): thêm nút ‹ › kiểu IG, ẩn ở hai đầu.
+// - Mobile/touch: vẫn vuốt như cũ, nhưng `snap-always` chặn fling bay qua nhiều ảnh.
 export function Gallery({
   ariaLabel = "Bộ ảnh",
   children,
@@ -15,35 +19,52 @@ export function Gallery({
   const slides = Array.isArray(children) ? children : [children];
   const n = slides.length;
   const trackRef = useRef<HTMLDivElement>(null);
+  const rafRef = useRef(0);
   const [index, setIndex] = useState(0);
 
-  // Đồng bộ chấm/đếm theo vị trí cuộn (không setState-trong-render).
+  useEffect(
+    () => () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    },
+    [],
+  );
+
+  // Đồng bộ chấm/đếm theo vị trí cuộn. scroll bắn rất dày -> gộp về 1 lần/frame.
   function onScroll() {
-    const el = trackRef.current;
-    if (!el) return;
-    const i = Math.round(el.scrollLeft / el.clientWidth);
-    setIndex((prev) => (prev === i ? prev : i));
+    if (rafRef.current) return;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = 0;
+      const el = trackRef.current;
+      if (!el) return;
+      const i = Math.round(el.scrollLeft / el.clientWidth);
+      setIndex((prev) => (prev === i ? prev : i));
+    });
   }
 
   function goTo(i: number) {
     const el = trackRef.current;
     if (!el) return;
+    const target = Math.max(0, Math.min(i, n - 1));
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    el.scrollTo({ left: i * el.clientWidth, behavior: reduce ? "auto" : "smooth" });
+    el.scrollTo({ left: target * el.clientWidth, behavior: reduce ? "auto" : "smooth" });
   }
 
   function onKey(e: React.KeyboardEvent) {
     if (e.key === "ArrowRight") {
       e.preventDefault();
-      goTo(Math.min(index + 1, n - 1));
+      goTo(index + 1);
     } else if (e.key === "ArrowLeft") {
       e.preventDefault();
-      goTo(Math.max(index - 1, 0));
+      goTo(index - 1);
     }
   }
 
   // Một slide: không cần carousel.
   if (n <= 1) return <>{slides}</>;
+
+  // Nút ‹ › — chỉ hiện trên desktop; ẩn (giữ chỗ) ở hai đầu như IG, không chuyển động.
+  const arrow =
+    "absolute top-1/2 z-20 hidden size-8 -translate-y-1/2 place-items-center rounded-full bg-surface/85 text-text shadow-soft ring-1 ring-border/60 backdrop-blur-sm hover:bg-surface hover:ring-border disabled:invisible desktop:grid";
 
   return (
     <div
@@ -60,11 +81,32 @@ export function Gallery({
         className="flex snap-x snap-mandatory items-center overflow-x-auto overscroll-x-contain [scrollbar-width:none] focus:outline-none [&::-webkit-scrollbar]:hidden"
       >
         {slides.map((slide, i) => (
-          <div key={i} className="w-full shrink-0 snap-center">
+          // snap-always = scroll-snap-stop: always -> một cú vuốt chỉ qua ĐÚNG 1 ảnh,
+          // fling mượt trên iOS/Android không còn "vuột" mất ảnh giữa.
+          <div key={i} className="w-full shrink-0 snap-center snap-always">
             {slide}
           </div>
         ))}
       </div>
+
+      <button
+        type="button"
+        onClick={() => goTo(index - 1)}
+        disabled={index === 0}
+        aria-label="Ảnh trước"
+        className={`${arrow} left-2`}
+      >
+        <ChevronIcon dir="left" />
+      </button>
+      <button
+        type="button"
+        onClick={() => goTo(index + 1)}
+        disabled={index === n - 1}
+        aria-label="Ảnh sau"
+        className={`${arrow} right-2`}
+      >
+        <ChevronIcon dir="right" />
+      </button>
 
       {/* Đếm "1/N" — pill kín đáo góc trên-phải */}
       <div
@@ -94,5 +136,23 @@ export function Gallery({
         </div>
       )}
     </div>
+  );
+}
+
+function ChevronIcon({ dir }: { dir: "left" | "right" }) {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 24 24"
+      width={16}
+      height={16}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.25}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d={dir === "left" ? "M14.5 5 8 12l6.5 7" : "M9.5 5 16 12l-6.5 7"} />
+    </svg>
   );
 }
