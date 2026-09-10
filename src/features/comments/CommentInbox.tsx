@@ -89,7 +89,7 @@ export function CommentInbox({
               {post && (
                 <Link
                   href={`/m/${post.slug}`}
-                  className="max-w-[55%] truncate text-accent hover:underline"
+                  className="max-w-[55%] truncate text-accent-text hover:underline"
                 >
                   {post.title}
                 </Link>

@@ -1,12 +1,20 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { PostCard } from "@/components/post/PostCard";
+import { Button } from "@/components/ui/Button";
 import { loadMorePosts, getFreshFeed } from "./actions";
 import type { Post } from "@/lib/db/posts";
+import type { MoodCode } from "@/lib/moods";
 
 // v2: Post có thêm heartCount (cache v1 thiếu field -> bỏ, tự hết hạn trong localStorage).
-const STORE_KEY = "feed:cache:v2";
+// Mỗi tâm trạng có KHOÁ RIÊNG: dùng chung một khoá thì cache của feed đầy đủ và
+// của trang lọc sẽ đè lẫn nhau (trang lọc "mọc" thêm bài mood khác khi back lại).
+const STORE_KEY_BASE = "feed:cache:v2";
+function storeKey(mood?: MoodCode) {
+  return mood ? `${STORE_KEY_BASE}:${mood}` : STORE_KEY_BASE;
+}
 
 type FeedCache = { posts: Post[]; done: boolean; scrollY: number; ts: number };
 
@@ -41,10 +49,14 @@ function samePost(a: Post, b: Post): boolean {
 export function FeedList({
   initial,
   pageSize,
+  mood,
 }: {
   initial: Post[];
   pageSize: number;
+  /** Có mặt -> đang ở trang lọc: mọi lần nạp thêm/làm tươi phải giữ đúng bộ lọc. */
+  mood?: MoodCode;
 }) {
+  const STORE_KEY = storeKey(mood);
   const [posts, setPosts] = useState<Post[]>(initial);
   const [done, setDone] = useState(initial.length < pageSize);
   const [pending, setPending] = useState(false);
@@ -101,7 +113,7 @@ export function FeedList({
     }
 
     let alive = true;
-    getFreshFeed(pageSize)
+    getFreshFeed(pageSize, mood)
       .then((fresh) => {
         if (!alive || fresh.length === 0) return;
         const cur = postsRef.current;
@@ -133,7 +145,7 @@ export function FeedList({
     return () => {
       alive = false;
     };
-  }, [pageSize, initial]);
+  }, [pageSize, initial, mood, STORE_KEY]);
 
   // Ghi cache khi list đổi (bỏ qua lần đầu để không đè cache trước khi khôi phục).
   useEffect(() => {
@@ -149,7 +161,7 @@ export function FeedList({
     } catch {
       /* im lặng */
     }
-  }, [posts, done]);
+  }, [posts, done, STORE_KEY]);
 
   // Ghi vị trí cuộn (throttle rAF) — để quay về đúng chỗ.
   useEffect(() => {
@@ -171,7 +183,7 @@ export function FeedList({
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
-  }, [posts, done]);
+  }, [posts, done, STORE_KEY]);
 
   async function more() {
     const last = posts[posts.length - 1];
@@ -181,6 +193,7 @@ export function FeedList({
       const next = await loadMorePosts(
         { createdAt: last.createdAt, id: last.id },
         pageSize,
+        mood,
       );
       setPosts((p) => [...p, ...next]);
       if (next.length < pageSize) setDone(true);
@@ -201,18 +214,33 @@ export function FeedList({
       </div>
 
       {done ? (
-        <p className="self-center py-12 text-center text-text-muted">
-          Hết rồi. Cảm ơn đã ghé.
-        </p>
+        // Điểm dừng ấm — cũng là nơi duy nhất dẫn sang /lich và /gioi-thieu:
+        // đặt ở đáy để vỏ điều hướng phía trên vẫn tĩnh, chỉ wordmark + toggle.
+        <div className="flex flex-col items-center gap-3 py-12 text-center">
+          <p className="text-text-muted">Hết rồi. Cảm ơn đã ghé.</p>
+          <p className="flex items-center gap-4 text-sm">
+            <Link href="/lich" className="text-accent-text hover:underline">
+              Lịch cảm xúc
+            </Link>
+            <Link
+              href="/gioi-thieu"
+              className="text-text-muted transition-colors hover:text-text"
+            >
+              Giới thiệu
+            </Link>
+          </p>
+        </div>
       ) : (
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={more}
-          disabled={pending}
-          className="mt-6 self-center rounded-sm border border-border bg-surface px-5 py-2 text-[13px] font-semibold text-accent transition-colors hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60"
+          loading={pending}
+          loadingLabel="Đang mở…"
+          className="mt-6 self-center"
         >
-          {pending ? "Đang mở…" : "Xem thêm"}
-        </button>
+          Xem thêm
+        </Button>
       )}
     </div>
   );

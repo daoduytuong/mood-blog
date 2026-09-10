@@ -11,7 +11,7 @@ import { MoodAvatar } from "@/components/post/MoodAvatar";
 import { formatPostDate } from "@/lib/date";
 import { MOODS } from "@/lib/moods";
 import { PostAuthorActions } from "@/components/post/PostAuthorActions";
-import { POST_TYPE_LABEL, POST_TYPE_FALLBACK_TITLE } from "@/lib/post-type";
+import { POST_TYPE_LABEL, postTitle } from "@/lib/post-type";
 import { ShareButton } from "@/components/post/ShareButton";
 import { HeartButton } from "@/features/hearts/HeartButton";
 import { LikeCount } from "@/features/hearts/LikeCount";
@@ -37,8 +37,7 @@ export async function generateMetadata({
   const post = await getBySlug(createPublicClient(), slug);
   if (!post) return {};
 
-  const title =
-    post.caption || post.excerpt || POST_TYPE_FALLBACK_TITLE[post.type];
+  const title = postTitle(post);
   const description =
     (post.excerpt || post.caption || "").slice(0, 200) || undefined;
   const imgPath = post.media[0]?.path;
@@ -220,7 +219,7 @@ export default async function PostDetail({
                   href={post.linkUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-[11px] uppercase tracking-[0.16em] text-accent hover:underline"
+                  className="text-[11px] uppercase tracking-[0.16em] text-accent-text hover:underline"
                 >
                   nguồn ↗
                 </a>

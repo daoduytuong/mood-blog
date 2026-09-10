@@ -188,7 +188,7 @@ export function PostCard({
               </div>
             )}
             {post.linkUrl && (
-              <span className="text-[11px] uppercase tracking-[0.16em] text-accent">
+              <span className="text-[11px] uppercase tracking-[0.16em] text-accent-text">
                 nguồn ↗
               </span>
             )}

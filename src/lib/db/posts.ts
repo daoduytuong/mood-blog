@@ -102,11 +102,16 @@ export interface FeedCursor {
   id: string;
 }
 
-/** Một trang Feed: bài cũ hơn `cursor` (keyset theo created_at,id). Defensive: lỗi -> []. */
+/**
+ * Một trang Feed: bài cũ hơn `cursor` (keyset theo created_at,id). Defensive: lỗi -> [].
+ * `mood` (tuỳ chọn) lọc theo tâm trạng — đi đúng index `idx_posts_mood
+ * (mood, created_at desc) where is_published` nên không cần migration.
+ */
 export async function listPublishedPage(
   sb: DB,
   limit: number,
   cursor?: FeedCursor,
+  mood?: MoodCode,
 ): Promise<Post[]> {
   let q = sb
     .from("posts")
@@ -115,6 +120,7 @@ export async function listPublishedPage(
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(limit);
+  if (mood) q = q.eq("mood", mood);
   if (cursor) {
     // (created_at, id) < (cursor.createdAt, cursor.id)
     q = q.or(
@@ -152,6 +158,30 @@ export async function getBySlug(sb: DB, slug: string): Promise<Post | null> {
   if (error || !data) return null;
   const [post] = await withHeartCounts(sb, [toPost(data)]);
   return post;
+}
+
+/** Dấu mốc tối giản của một bài — chỉ đủ vẽ lịch cảm xúc. */
+export interface PostMoodStamp {
+  createdAt: string;
+  mood: MoodCode;
+  slug: string;
+}
+
+/**
+ * Mốc (ngày, tâm trạng, slug) của MỌI bài đã publish — cho `/lich`.
+ * Chỉ 3 cột: KHÔNG kéo `media`/`caption` (một bài đa ảnh có blurDataURL nặng gấp
+ * nhiều lần cả trang lịch). Cũ nhất... để feature tự nhóm theo ngày giờ VN.
+ */
+export async function listMoodStamps(sb: DB): Promise<PostMoodStamp[]> {
+  const { data, error } = await sb
+    .from("posts")
+    .select("created_at, mood, slug")
+    .eq("is_published", true)
+    .order("created_at", { ascending: false });
+  if (error || !data) return [];
+  return (data as { created_at: string; mood: MoodCode; slug: string }[]).map(
+    (r) => ({ createdAt: r.created_at, mood: r.mood, slug: r.slug }),
+  );
 }
 
 /** Mọi slug đã publish (cho generateStaticParams). */

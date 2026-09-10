@@ -15,8 +15,13 @@ import {
   type ComposeState,
 } from "./actions";
 import { resizeImage } from "./resize-image";
-import { MOODS, MOOD_CODES, type MoodCode } from "@/lib/moods";
+import { MOOD_CODES, type MoodCode } from "@/lib/moods";
 import { createClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/Button";
+import { MoodChip } from "@/components/ui/Chip";
+import { FormError } from "@/components/ui/Field";
+import { Input } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Textarea";
 
 const MAX_IMAGES = 10;
 
@@ -234,7 +239,7 @@ export function ComposeForm() {
                       type="button"
                       onClick={() => removeImage(i)}
                       aria-label={`Bỏ ảnh ${i + 1}`}
-                      className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full bg-surface/90 text-text shadow-soft transition-colors hover:text-accent"
+                      className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full bg-surface/90 text-text shadow-soft transition-colors hover:text-accent-text"
                     >×</button>
                   </div>
                 ))}
@@ -251,11 +256,10 @@ export function ComposeForm() {
             </div>
           ) : (
             <div className="flex flex-col gap-2">
-              <input
+              <Input
                 type="url"
                 name="videoUrl"
                 placeholder="Dán link Vimeo (vd vimeo.com/123456789)"
-                className="rounded-md border border-border bg-surface px-3 py-2 text-text outline-none focus:border-accent"
               />
               <p className="text-xs text-text-muted">
                 Chỉ hỗ trợ Vimeo. Video sẽ hiện ảnh tĩnh, chạm mới phát.
@@ -275,7 +279,7 @@ export function ComposeForm() {
                     type="button"
                     onClick={() => removeImage(i)}
                     aria-label={`Bỏ ảnh ${i + 1}`}
-                    className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full bg-surface/90 text-text shadow-soft transition-colors hover:text-accent"
+                    className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full bg-surface/90 text-text shadow-soft transition-colors hover:text-accent-text"
                   >×</button>
                 </div>
               ))}
@@ -293,44 +297,38 @@ export function ComposeForm() {
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
-            <input
+            <Input
               type="date"
               name="date"
               value={entryDate}
               onChange={(e) => setEntryDate(e.target.value)}
               suppressHydrationWarning
               aria-label="Ngày của chặng đầu tiên"
-              className="rounded-md border border-border bg-surface px-3 py-2 text-text outline-none focus:border-accent"
             />
-            <input
+            <Input
               type="text"
               name="entryNote"
               maxLength={500}
               placeholder="Ghi chú chặng này (tuỳ chọn)"
-              className="flex-1 rounded-md border border-border bg-surface px-3 py-2 text-text outline-none focus:border-accent"
+              className="flex-1"
             />
           </div>
         </div>
       ) : (
         <div className="flex flex-col gap-4">
-          <input
-            type="url"
-            name="linkUrl"
-            placeholder="Dán link (tuỳ chọn)"
-            className="rounded-md border border-border bg-surface px-3 py-2 text-text outline-none focus:border-accent"
-          />
-          <textarea
+          <Input type="url" name="linkUrl" placeholder="Dán link (tuỳ chọn)" />
+          <Textarea
             name="excerpt"
             rows={3}
             placeholder="Một đoạn bạn tâm đắc…"
-            className="resize-none rounded-md border border-border bg-surface px-3 py-2 italic text-text outline-none focus:border-accent"
+            className="italic"
             style={{ fontFamily: "var(--font-serif)" }}
           />
         </div>
       )}
 
       {/* Caption / cảm nhận */}
-      <textarea
+      <Textarea
         name="caption"
         rows={3}
         placeholder={
@@ -340,7 +338,6 @@ export function ComposeForm() {
               ? "Hành trình này là gì? (vd: Tập gym)"
               : "Vì sao bạn thích điều này?"
         }
-        className="resize-none rounded-md border border-border bg-surface px-3 py-2 text-text outline-none focus:border-accent"
         style={{ fontFamily: "var(--font-serif)" }}
       />
 
@@ -348,44 +345,27 @@ export function ComposeForm() {
       <div>
         <p className="mb-2 text-sm text-text-muted">Tâm trạng</p>
         <div className="flex flex-wrap gap-2">
-          {MOOD_CODES.map((code) => {
-            const selected = mood === code;
-            return (
-              <button
-                key={code}
-                type="button"
-                onClick={() => setMood(code)}
-                aria-pressed={selected}
-                className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                  selected
-                    ? "border-accent text-text"
-                    : "border-border text-text-muted hover:text-text"
-                }`}
-              >
-                <span
-                  className="h-3 w-3 rounded-full"
-                  style={{ background: `var(${MOODS[code].tokenVar})` }}
-                />
-                {MOODS[code].label}
-              </button>
-            );
-          })}
+          {MOOD_CODES.map((code) => (
+            <MoodChip
+              key={code}
+              code={code}
+              selected={mood === code}
+              onClick={() => setMood(code)}
+            />
+          ))}
         </div>
       </div>
 
-      {error && (
-        <p className="text-sm text-text-muted" role="alert">
-          {error}
-        </p>
-      )}
+      {error && <FormError>{error}</FormError>}
 
-      <button
+      <Button
         type="submit"
-        disabled={busy}
-        className="self-start rounded-md bg-accent px-5 py-2 text-on-accent transition-opacity disabled:opacity-60"
+        className="self-start"
+        loading={busy}
+        loadingLabel="Đang lưu…"
       >
-        {busy ? "Đang lưu…" : "Đăng"}
-      </button>
+        Đăng
+      </Button>
     </form>
   );
 }

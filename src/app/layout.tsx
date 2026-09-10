@@ -28,7 +28,13 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#FAFAFA",
+  // Hai giá trị để thanh trình duyệt không kẹt màu sáng khi máy đang ở nền tối.
+  // Giới hạn đã biết: đây là `prefers-color-scheme`, nên nếu người xem TỰ bấm
+  // ThemeToggle ngược với cài đặt máy thì thanh trình duyệt vẫn theo máy.
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#FAFAFA" },
+    { media: "(prefers-color-scheme: dark)", color: "#0E0E0E" },
+  ],
 };
 
 export default function RootLayout({

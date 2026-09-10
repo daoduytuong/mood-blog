@@ -5,6 +5,9 @@ import { useActionState, useEffect, useRef, useState, useTransition } from "reac
 import { updateJourneyEntry, type ComposeState } from "@/features/compose/actions";
 import { resizeImage } from "@/features/compose/resize-image";
 import { createClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/Button";
+import { FormError } from "@/components/ui/Field";
+import { Input } from "@/components/ui/Input";
 
 export interface JourneyEntryItem {
   path: string;
@@ -142,21 +145,21 @@ export function JourneyEntryEditor({
         </button>
 
         <div className="flex min-w-0 flex-1 flex-col gap-2">
-          <input
+          <Input
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
             aria-label={`Ngày chặng ${ordinal}`}
-            className="rounded-sm border border-border bg-surface px-3 py-1.5 text-[13px] text-text outline-none focus:border-accent"
+            size="sm"
           />
-          <input
+          <Input
             type="text"
             value={note}
             onChange={(e) => setNote(e.target.value)}
             maxLength={500}
             placeholder="Ghi chú chặng này (tuỳ chọn)"
             aria-label={`Ghi chú chặng ${ordinal}`}
-            className="rounded-sm border border-border bg-surface px-3 py-1.5 text-[13px] text-text outline-none focus:border-accent"
+            size="sm"
           />
         </div>
       </div>
@@ -182,18 +185,12 @@ export function JourneyEntryEditor({
         </p>
       )}
 
-      {error && (
-        <p className="text-sm text-text-muted" role="alert">{error}</p>
-      )}
+      {error && <FormError>{error}</FormError>}
 
       <div className="flex items-center gap-4">
-        <button
-          type="submit"
-          disabled={busy}
-          className="rounded-sm bg-accent px-4 py-1.5 text-[13px] font-semibold text-on-accent transition-opacity disabled:opacity-60"
-        >
-          {busy ? "Đang lưu…" : "Lưu chặng"}
-        </button>
+        <Button type="submit" size="sm" loading={busy} loadingLabel="Đang lưu…">
+          Lưu chặng
+        </Button>
         <button
           type="button"
           onClick={onCancel}

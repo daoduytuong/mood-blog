@@ -1,5 +1,6 @@
 import { getFeedPage } from "@/features/feed/queries";
 import { FeedList } from "@/features/feed/FeedList";
+import { MoodFilterChips } from "@/components/post/MoodFilterChips";
 
 // Feed công khai: đọc-nhiều, tĩnh + ISR (client không-cookie giữ static).
 export const revalidate = 300;
@@ -21,6 +22,7 @@ export default async function Home() {
 
   return (
     <main className="mx-auto w-full max-w-container px-4.5 py-4 sm:py-8">
+      <MoodFilterChips />
       <FeedList initial={posts} pageSize={PAGE_SIZE} />
     </main>
   );

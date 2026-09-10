@@ -13,11 +13,13 @@ import { formatPostDate } from "@/lib/date";
 import { signOut } from "@/features/auth/actions";
 import { MoodBar, MoodLabel } from "@/components/post/MoodBar";
 import { HeartIcon } from "@/components/ui/HeartIcon";
+import { buttonClass } from "@/components/ui/Button";
 import {
   CommentInbox,
   type InboxPost,
 } from "@/features/comments/CommentInbox";
-import { POST_TYPE_FALLBACK_TITLE } from "@/lib/post-type";
+import { postThumb, postTitle } from "@/lib/post-type";
+import { MemoriesSection } from "@/features/memories/MemoriesSection";
 
 // Author-only, dynamic (đọc session + số liệu author-only, KHÔNG cache).
 export const dynamic = "force-dynamic";
@@ -46,7 +48,7 @@ export default async function MePage() {
       p.id,
       {
         slug: p.slug,
-        title: p.caption || p.excerpt || POST_TYPE_FALLBACK_TITLE[p.type],
+        title: postTitle(p),
       },
     ]),
   );
@@ -78,10 +80,7 @@ export default async function MePage() {
           <p className="font-serif text-text-muted">
             Chưa có bài nào. Khi nào rảnh, ghi lại một khoảnh khắc nhé.
           </p>
-          <Link
-            href="/compose"
-            className="rounded-md bg-accent px-4 py-2 text-sm text-on-accent"
-          >
+          <Link href="/compose" className={buttonClass("primary", "sm")}>
             Soạn bài
           </Link>
         </div>
@@ -101,15 +100,8 @@ export default async function MePage() {
           <div className="mt-8 grid grid-cols-2 gap-4">
             {posts.map((post) => {
               const total = counts[post.id] ?? 0;
-              const title =
-                post.caption ||
-                post.excerpt ||
-                POST_TYPE_FALLBACK_TITLE[post.type];
-              // Hành trình: thumbnail = chặng mới nhất (phần tử cuối).
-              const media =
-                post.type === "hanh_trinh"
-                  ? post.media[post.media.length - 1]
-                  : post.media[0];
+              const title = postTitle(post);
+              const media = postThumb(post);
               const imgPath = media?.path;
               const poster = media?.poster_url;
               return (
@@ -148,7 +140,9 @@ export default async function MePage() {
                     <div className="flex items-center justify-between gap-2">
                       <MoodLabel mood={post.mood} />
                       <span className="inline-flex items-center gap-1 text-xs text-text-muted">
-                        <HeartIcon size={14} fillOpacity={0.5} strokeWidth={1.5} />
+                        {/* fillOpacity=1 khớp HeartButton (trước là 0.5 -> tim /me
+                            trông như "nửa thả"); sắc muted đến từ text-text-muted. */}
+                        <HeartIcon size={14} fillOpacity={1} strokeWidth={1.5} />
                         {total}
                       </span>
                     </div>
@@ -162,6 +156,9 @@ export default async function MePage() {
           </div>
         </>
       )}
+
+      {/* Ngày này năm xưa — tự ẩn nếu hôm nay không trùng ngày bài nào. */}
+      <MemoriesSection posts={posts} />
 
       {/* Hộp thư — lời người xem gửi tới (chấm báo "mới" + ẩn/xoá). */}
       <section className="mt-14">

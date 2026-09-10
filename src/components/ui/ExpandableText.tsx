@@ -45,7 +45,7 @@ export function ExpandableText({
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="pointer-events-auto relative z-10 mt-0.5 text-xs text-text-muted transition-colors hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="pointer-events-auto relative z-10 mt-0.5 text-xs text-text-muted transition-colors hover:text-accent-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           {expanded ? "Thu gọn" : "Xem thêm"}
         </button>

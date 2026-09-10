@@ -35,7 +35,7 @@ export function PostAuthorActions({
       {type === "hanh_trinh" && (
         <Link
           href={`/m/${slug}/add`}
-          className="text-accent underline-offset-2 hover:underline"
+          className="text-accent-text underline-offset-2 hover:underline"
         >
           + Thêm chặng
         </Link>
@@ -57,7 +57,10 @@ export function PostAuthorActions({
             )
               e.preventDefault();
           }}
-          className="text-text-muted underline-offset-2 transition-colors hover:text-text hover:underline"
+          // Giữ dáng chữ (hàng này toàn link chữ), nhưng hover đổi sang màu lỗi:
+          // báo "đây là việc không hoàn tác" đúng lúc người ta chạm tới, không
+          // phải một vệt đỏ nằm sẵn trên trang.
+          className="text-text-muted underline-offset-2 transition-colors hover:text-error hover:underline"
         >
           Xoá
         </button>

@@ -13,9 +13,19 @@
   --color-text:       #262626;
   --color-text-muted: #737373; /* KHÔNG dùng #8E8E8E của IG — fail AA trên nền trắng */
   --color-border:     #DBDBDB;
-  --color-accent:     #3897F0; /* xanh IG — dùng cho icon/fill/nút; text nhỏ dùng text-muted */
+  --color-accent:     #3897F0; /* xanh IG — CHỈ cho nền/viền/fill (bg-accent, border-accent) */
+  /* Xanh IG gốc chỉ đạt 3.06:1 trên nền linen -> FAIL AA cho chữ thường.
+     Mọi chỗ accent làm MÀU CHỮ (link, nhãn, icon) dùng token này: 4.8:1 trên
+     trắng, 4.7:1 trên #FAFAFA. Nền tối không cần tối thêm nên bằng --color-accent. */
+  --color-accent-text: #1B74C4;
   --color-on-accent:  #FFFFFF;
   --color-like:       #ED4956; /* tim đã thả (accent giờ là xanh) */
+
+  /* Lỗi/nguy hiểm — đỏ GẠCH (khác hẳn --color-like đỏ tươi, để "lỗi" không bị
+     đọc thành "đã thả tim"). Giọng dịu: dùng cho chữ validation + nút Xoá dạng
+     VIỀN, KHÔNG nút đỏ đặc. AA: #C0392B/trắng 5.4:1 · #C0392B/#FBEAE8 4.7:1. */
+  --color-error:      #C0392B;
+  --color-error-soft: #FBEAE8; /* nền message/hover nút Xoá */
 
   /* 6 sắc màu tâm trạng */
   --color-mood-hoai-niem: #B07A6E;
@@ -64,8 +74,13 @@
   --color-text-muted: #A0A0A0;
   --color-border:     #2E2E2E;
   --color-accent:     #4DA3F5;
+  --color-accent-text: #4DA3F5; /* 7.2:1 trên #0E0E0E, 6.5:1 trên #1A1A1A — đủ AA */
   --color-on-accent:  #0E0E0E;
   --color-like:       #F16D75;
+
+  /* AA: #F58C86/#1A1A1A 7.4:1 · #F58C86/#2A1715 7.3:1 */
+  --color-error:      #F58C86;
+  --color-error-soft: #2A1715;
 
   --color-mood-hoai-niem: #CE9587;
   --color-mood-binh-yen:  #8FBCAE;
