@@ -131,7 +131,7 @@ export default async function PostDetail({
                 <Lightbox
                   key={i}
                   src={mediaPublicUrl(m.path!)}
-                  alt={`${post.caption ?? "Một khoảnh khắc"} (ảnh ${i + 1})`}
+                  alt={m.alt || `${post.caption ?? "Một khoảnh khắc"} (ảnh ${i + 1})`}
                   sizes="(max-width: 600px) 100vw, 600px"
                   blurDataURL={m.blurDataURL}
                   ratio={sharedRatio}
@@ -143,7 +143,7 @@ export default async function PostDetail({
           ) : imageItems[0]?.path ? (
             <Lightbox
               src={mediaPublicUrl(imageItems[0].path)}
-              alt={post.caption ?? "Một khoảnh khắc"}
+              alt={imageItems[0].alt || (post.caption ?? "Một khoảnh khắc")}
               sizes="(max-width: 600px) 100vw, 600px"
               blurDataURL={imageItems[0].blurDataURL}
               ratio={ratioOf(imageItems[0])}
@@ -177,7 +177,7 @@ export default async function PostDetail({
                   </div>
                   <Lightbox
                     src={mediaPublicUrl(m.path!)}
-                    alt={`${post.caption ?? "Hành trình"} — chặng ${ordinal}`}
+                    alt={m.alt || `${post.caption ?? "Hành trình"} — chặng ${ordinal}`}
                     sizes="(max-width: 600px) 100vw, 600px"
                     blurDataURL={m.blurDataURL}
                     ratio={ratioOf(m)}

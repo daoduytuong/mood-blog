@@ -35,6 +35,7 @@ async function uniqueSlug(
 
 const MAX_IMAGES = 10;
 const MAX_JOURNEY_ENTRIES = 200; // hành trình dài hơi (vd gym ~2 năm, 2-3 chặng/tuần)
+const MAX_ALT = 200; // alt là một câu mô tả, không phải bài viết
 
 // Khử media ảnh từ client (chống tamper): path PHẢI thuộc namespace user; blurDataURL capped.
 function sanitizeImageMedia(raw: unknown, userId: string): MediaItem[] {
@@ -49,7 +50,10 @@ function sanitizeImageMedia(raw: unknown, userId: string): MediaItem[] {
     const b = r.blurDataURL;
     const blurDataURL =
       typeof b === "string" && b.startsWith("data:image/") && b.length < 4000 ? b : undefined;
-    out.push({ path: r.path, w, h, blurDataURL });
+    // Rỗng -> undefined (không lưu chuỗi rỗng): chỗ render fallback về caption.
+    const alt =
+      typeof r.alt === "string" ? r.alt.trim().slice(0, MAX_ALT) || undefined : undefined;
+    out.push({ path: r.path, w, h, blurDataURL, alt });
   }
   return out;
 }
@@ -219,7 +223,10 @@ export async function updateJourneyEntry(
     formData.get("date") || current.date,
   );
   const next = [...existing.media];
-  next[idx] = replacement ? { ...replacement, ...meta } : { ...current, ...meta };
+  // Đổi ảnh nhưng form sửa chặng KHÔNG có ô alt -> giữ alt cũ, đừng để nó rụng âm thầm.
+  next[idx] = replacement
+    ? { ...replacement, alt: replacement.alt ?? current.alt, ...meta }
+    : { ...current, ...meta };
 
   try {
     await updatePost(supabase, id, { media: next });

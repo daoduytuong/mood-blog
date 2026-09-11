@@ -16,6 +16,7 @@ import {
 } from "./actions";
 import { resizeImage } from "./resize-image";
 import { MOOD_CODES, type MoodCode } from "@/lib/moods";
+import type { MediaItem } from "@/lib/db/types";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
 import { MoodChip } from "@/components/ui/Chip";
@@ -34,7 +35,49 @@ function localToday(): string {
   return new Date().toLocaleDateString("en-CA");
 }
 
-type Picked = { file: File; url: string };
+type Picked = { file: File; url: string; alt: string };
+
+const MAX_ALT = 200; // khớp mức cắt ở actions.ts (server vẫn là nơi chốt)
+
+/**
+ * Ô mô tả ảnh (alt) — một hàng mỗi ảnh: ảnh nhỏ + ô nhập RỘNG.
+ * Không nhét vào lưới 3 cột: ô nhập ~100px trên mobile thì không gõ nổi.
+ */
+function AltFields({
+  images,
+  onChange,
+}: {
+  images: Picked[];
+  onChange: (index: number, alt: string) => void;
+}) {
+  if (images.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-xs text-text-muted">
+        Mô tả ảnh (tuỳ chọn) — cho người dùng trình đọc màn hình.
+      </p>
+      {images.map((im, i) => (
+        <div key={im.url} className="flex items-center gap-2">
+          <span className="h-10 w-10 shrink-0 overflow-hidden rounded-md border border-border">
+            {/* eslint-disable-next-line @next/next/no-img-element -- preview blob tạm */}
+            <img src={im.url} alt="" className="h-full w-full object-cover" />
+          </span>
+          <Input
+            type="text"
+            value={im.alt}
+            maxLength={MAX_ALT}
+            onChange={(e) => onChange(i, e.target.value)}
+            aria-label={`Mô tả ảnh ${i + 1}`}
+            placeholder={
+              images.length > 1 ? `Trong ảnh ${i + 1} có gì?` : "Trong ảnh có gì?"
+            }
+            className="flex-1"
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export function ComposeForm() {
   const [type, setType] = useState<PostType>("khoanh_khac");
@@ -71,10 +114,16 @@ export function ComposeForm() {
     const files = Array.from(e.target.files ?? []);
     setImages((prev) => {
       const room = MAX_IMAGES - prev.length;
-      const add = files.slice(0, Math.max(0, room)).map((file) => ({ file, url: URL.createObjectURL(file) }));
+      const add = files
+        .slice(0, Math.max(0, room))
+        .map((file) => ({ file, url: URL.createObjectURL(file), alt: "" }));
       return [...prev, ...add];
     });
     e.target.value = ""; // cho chọn lại cùng file
+  }
+
+  function setAlt(i: number, alt: string) {
+    setImages((prev) => prev.map((im, k) => (k === i ? { ...im, alt } : im)));
   }
 
   function removeImage(i: number) {
@@ -93,15 +142,13 @@ export function ComposeForm() {
   }
 
   // Resize + upload các ảnh đã chọn lên Storage. Trả null nếu lỗi (đã setLocalError).
-  async function uploadPicked(
-    list: Picked[],
-  ): Promise<{ path: string; w: number; h: number; blurDataURL: string }[] | null> {
+  async function uploadPicked(list: Picked[]): Promise<MediaItem[] | null> {
     setUploading(true);
     try {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setLocalError("Bạn cần đăng nhập đã nhé."); return null; }
-      const media: { path: string; w: number; h: number; blurDataURL: string }[] = [];
+      const media: MediaItem[] = [];
       for (const im of list) {
         let r;
         try { r = await resizeImage(im.file); }
@@ -111,7 +158,13 @@ export function ComposeForm() {
           .from("media")
           .upload(path, r.blob, { contentType: "image/webp", upsert: false });
         if (upErr) { setLocalError("Chưa tải được ảnh lên, thử lại nhé."); return null; }
-        media.push({ path, w: r.width, h: r.height, blurDataURL: r.blurDataURL });
+        media.push({
+          path,
+          w: r.width,
+          h: r.height,
+          blurDataURL: r.blurDataURL,
+          alt: im.alt.trim() || undefined,
+        });
       }
       return media;
     } catch {
@@ -253,6 +306,7 @@ export function ComposeForm() {
               </div>
               <input ref={fileRef} type="file" accept="image/*" multiple onChange={onPickFiles} className="hidden" />
               <p className="text-xs text-text-muted">Tối đa {MAX_IMAGES} ảnh · vuốt để xem trong feed.</p>
+              <AltFields images={images} onChange={setAlt} />
             </div>
           ) : (
             <div className="flex flex-col gap-2">
@@ -295,6 +349,7 @@ export function ComposeForm() {
             <p className="text-xs text-text-muted">
               Một ảnh cho chặng đầu tiên · các chặng sau thêm ngay trên trang bài.
             </p>
+            <AltFields images={images} onChange={setAlt} />
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
             <Input

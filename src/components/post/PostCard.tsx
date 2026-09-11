@@ -102,7 +102,7 @@ export function PostCard({
                   >
                     <ImageBlur
                       src={mediaPublicUrl(m.path!)}
-                      alt={`${post.caption ?? "Một khoảnh khắc"} (ảnh ${i + 1})`}
+                      alt={m.alt || `${post.caption ?? "Một khoảnh khắc"} (ảnh ${i + 1})`}
                       sizes={FEED_IMG_SIZES}
                       blurDataURL={m.blurDataURL}
                       ratio={sharedRatio}
@@ -121,7 +121,7 @@ export function PostCard({
             >
               <ImageBlur
                 src={mediaPublicUrl(imageItems[0].path)}
-                alt={post.caption ?? "Một khoảnh khắc"}
+                alt={imageItems[0].alt || (post.caption ?? "Một khoảnh khắc")}
                 sizes={FEED_IMG_SIZES}
                 blurDataURL={imageItems[0].blurDataURL}
                 ratio={ratioOf(imageItems[0])}
@@ -143,7 +143,7 @@ export function PostCard({
                   >
                     <ImageBlur
                       src={mediaPublicUrl(m.path!)}
-                      alt={`${post.caption ?? "Một hành trình"} (chặng ${ordinal})`}
+                      alt={m.alt || `${post.caption ?? "Một hành trình"} (chặng ${ordinal})`}
                       sizes={FEED_IMG_SIZES}
                       blurDataURL={m.blurDataURL}
                       ratio={sharedRatio}
@@ -162,7 +162,10 @@ export function PostCard({
             >
               <ImageBlur
                 src={mediaPublicUrl(journeySlides[0].m.path)}
-                alt={`${post.caption ?? "Một hành trình"} (chặng 1)`}
+                alt={
+                  journeySlides[0].m.alt ||
+                  `${post.caption ?? "Một hành trình"} (chặng 1)`
+                }
                 sizes={FEED_IMG_SIZES}
                 blurDataURL={journeySlides[0].m.blurDataURL}
                 ratio={ratioOf(journeySlides[0].m)}

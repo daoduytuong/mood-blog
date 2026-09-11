@@ -9,6 +9,7 @@ import { FormError } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 
 const initial: ComposeState = { error: null };
+const MAX_ALT = 200; // khớp mức cắt ở compose/actions.ts (server vẫn là nơi chốt)
 
 // YYYY-MM-DD theo giờ máy người dùng (giờ VN).
 function localToday(): string {
@@ -72,11 +73,20 @@ export function AddEntryForm({ id, slug }: { id: string; slug: string }) {
       const note = (
         form.elements.namedItem("entryNote") as HTMLInputElement | null
       )?.value.trim() ?? "";
+      const alt = (
+        form.elements.namedItem("alt") as HTMLInputElement | null
+      )?.value.trim() ?? "";
       const fd = new FormData();
       fd.set("id", id);
       fd.set("slug", slug);
       fd.set("media", JSON.stringify([
-        { path, w: r.width, h: r.height, blurDataURL: r.blurDataURL },
+        {
+          path,
+          w: r.width,
+          h: r.height,
+          blurDataURL: r.blurDataURL,
+          alt: alt || undefined,
+        },
       ]));
       fd.set("note", note);
       fd.set("date", entryDate || localToday());
@@ -112,6 +122,16 @@ export function AddEntryForm({ id, slug }: { id: string; slug: string }) {
         >+ Ảnh của chặng này</button>
       )}
       <input ref={fileRef} type="file" accept="image/*" onChange={onPickFile} className="hidden" />
+
+      {picked && (
+        <Input
+          type="text"
+          name="alt"
+          maxLength={MAX_ALT}
+          aria-label="Mô tả ảnh của chặng"
+          placeholder="Trong ảnh có gì? (tuỳ chọn — cho trình đọc màn hình)"
+        />
+      )}
 
       <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
         <Input
