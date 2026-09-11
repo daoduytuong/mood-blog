@@ -15,7 +15,7 @@ import { slugify } from "./slug";
 import { gocDocSchema } from "./schema";
 import { fetchVimeoMeta } from "./vimeo";
 import { MOOD_CODES, type MoodCode } from "@/lib/moods";
-import type { MediaItem } from "@/lib/db/types";
+import type { MediaItem, PostType } from "@/lib/db/types";
 
 export interface ComposeState {
   error: string | null;
@@ -278,6 +278,82 @@ export async function removeJourneyEntry(formData: FormData): Promise<void> {
     revalidatePath(`/m/${slug}`);
   }
   redirect(`/m/${slug}/edit`);
+}
+
+// ===== NHÁP =====
+// Nháp = post is_published=false. RLS `posts_public_read using (is_published)`
+// đã khiến nó vô hình với mọi đường đọc công khai -> không cần migration.
+
+const DRAFT_TYPES: PostType[] = ["khoanh_khac", "goc_doc", "hanh_trinh"];
+
+/** Lưu nháp: bài chưa đăng, slug TẠM. Slug thật sinh lúc Đăng. */
+export async function saveDraft(
+  _prev: ComposeState,
+  formData: FormData,
+): Promise<ComposeState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Bạn cần đăng nhập đã nhé." };
+
+  const type = String(formData.get("type") ?? "") as PostType;
+  if (!DRAFT_TYPES.includes(type)) return { error: "Loại bài không hợp lệ." };
+
+  const mood = String(formData.get("mood") ?? "");
+  if (!MOOD_CODES.includes(mood as MoodCode))
+    return { error: "Chọn một tâm trạng giúp mình nhé." };
+
+  const caption = String(formData.get("caption") ?? "").trim();
+  const excerpt = String(formData.get("excerpt") ?? "").trim();
+  const linkUrl = String(formData.get("linkUrl") ?? "").trim();
+
+  // Góc đọc: ràng buộc DB `goc_doc_has_source` đòi có link HOẶC trích, kể cả
+  // khi còn là nháp -> chặn ở đây để không ăn lỗi insert khó hiểu.
+  if (type === "goc_doc" && !linkUrl && !excerpt)
+    return { error: "Thêm một link hoặc đoạn trích nhé." };
+
+  let media: MediaItem[] = [];
+  try {
+    media = sanitizeImageMedia(
+      JSON.parse(String(formData.get("media") ?? "[]")),
+      user.id,
+    );
+  } catch {
+    media = [];
+  }
+  if (media.length > MAX_IMAGES) media = media.slice(0, MAX_IMAGES);
+
+  // Hành trình: chặng đầu mang ngày + ghi chú (như createJourney).
+  if (type === "hanh_trinh" && media[0]) {
+    const meta = sanitizeEntryMeta(formData.get("note"), formData.get("date"));
+    media = [{ ...media[0], ...meta }];
+  }
+
+  // Hint RỖNG -> luôn ra dạng `nhap-<base36>`. Cố ý KHÔNG truyền caption: slug
+  // sẽ sinh lại lúc đăng, sinh theo caption ở đây chỉ tạo hai slug cho một bài.
+  const slug = await uniqueSlug(supabase, "", "nhap");
+  try {
+    await createPost(supabase, {
+      authorId: user.id,
+      type,
+      mood: mood as MoodCode,
+      slug,
+      caption: caption || null,
+      excerpt: excerpt || null,
+      linkUrl: linkUrl || null,
+      media,
+      isPublished: false,
+    });
+  } catch {
+    const paths = media.map((m) => m.path).filter((p): p is string => !!p);
+    if (paths.length) await supabase.storage.from("media").remove(paths);
+    return { error: "Chưa lưu được nháp, thử lại nhé." };
+  }
+
+  // KHÔNG revalidatePath: nháp không lên trang công khai nào, và /me là
+  // force-dynamic nên tự tươi.
+  redirect("/me");
 }
 
 // Khoảnh khắc ẢNH (1..N) — ảnh đã được client upload lên Storage; action chỉ insert post.

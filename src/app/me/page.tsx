@@ -20,6 +20,7 @@ import {
 } from "@/features/comments/CommentInbox";
 import { postThumb, postTitle } from "@/lib/post-type";
 import { MemoriesSection } from "@/features/memories/MemoriesSection";
+import { DraftList } from "@/features/drafts/DraftList";
 
 // Author-only, dynamic (đọc session + số liệu author-only, KHÔNG cache).
 export const dynamic = "force-dynamic";
@@ -31,7 +32,10 @@ export default async function MePage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login?returnTo=/me"); // double-check ngoài proxy guard
 
-  const posts = await listByAuthor(supabase, user.id);
+  // listByAuthor trả MỌI bài (kể cả nháp) — tách ở đây, không sửa tầng db.
+  const all = await listByAuthor(supabase, user.id);
+  const posts = all.filter((p) => p.isPublished);
+  const drafts = all.filter((p) => !p.isPublished);
   const postIds = posts.map((p) => p.id);
   const [counts, recent, totalComments] = await Promise.all([
     countsForAuthor(supabase),
@@ -75,7 +79,10 @@ export default async function MePage() {
         </form>
       </div>
 
-      {posts.length === 0 ? (
+      {/* Nháp — chưa đăng, đặt trên lưới bài vì đây là việc còn dở. */}
+      <DraftList drafts={drafts} />
+
+      {posts.length === 0 && drafts.length === 0 ? (
         <div className="mt-12 flex flex-col items-start gap-4">
           <p className="font-serif text-text-muted">
             Chưa có bài nào. Khi nào rảnh, ghi lại một khoảnh khắc nhé.

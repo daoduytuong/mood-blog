@@ -12,6 +12,7 @@ import {
   createMomentVideo,
   createGocDoc,
   createJourney,
+  saveDraft,
   type ComposeState,
 } from "./actions";
 import { resizeImage } from "./resize-image";
@@ -86,6 +87,7 @@ export function ComposeForm() {
   const [videoState, videoAction] = useActionState(createMomentVideo, initial);
   const [gocDocState, gocDocAction] = useActionState(createGocDoc, initial);
   const [journeyState, journeyAction] = useActionState(createJourney, initial);
+  const [draftState, draftAction] = useActionState(saveDraft, initial);
   // Ngày local (VN); SSR có thể ra ngày UTC khác trong 00:00–07:00 -> suppressHydrationWarning ở input.
   const [entryDate, setEntryDate] = useState(() => localToday());
   const [pending, startTransition] = useTransition();
@@ -105,7 +107,8 @@ export function ComposeForm() {
     imagesState.error ??
     videoState.error ??
     gocDocState.error ??
-    journeyState.error;
+    journeyState.error ??
+    draftState.error;
 
   // Thu hồi tất cả blob URL khi unmount.
   useEffect(() => () => { imagesRef.current.forEach((im) => URL.revokeObjectURL(im.url)); }, []);
@@ -182,6 +185,31 @@ export function ComposeForm() {
     if (!mood) return setLocalError("Chọn một tâm trạng giúp mình nhé.");
 
     const caption = fieldValue(form, "caption");
+
+    // Nút nào vừa bấm: "Lưu nháp" hay "Đăng".
+    const submitter = (e.nativeEvent as SubmitEvent)
+      .submitter as HTMLButtonElement | null;
+
+    if (submitter?.value === "draft") {
+      // Nháp: ảnh là TUỲ CHỌN (chưa có ảnh vẫn lưu được).
+      const media = images.length > 0 ? await uploadPicked(images) : [];
+      if (media === null) return; // uploadPicked đã setLocalError
+      const fd = new FormData();
+      fd.set("type", type);
+      fd.set("mood", mood);
+      fd.set("caption", caption);
+      fd.set("media", JSON.stringify(media));
+      if (type === "goc_doc") {
+        fd.set("linkUrl", fieldValue(form, "linkUrl"));
+        fd.set("excerpt", fieldValue(form, "excerpt"));
+      }
+      if (type === "hanh_trinh") {
+        fd.set("note", fieldValue(form, "entryNote"));
+        fd.set("date", entryDate || localToday());
+      }
+      startTransition(() => draftAction(fd));
+      return;
+    }
 
     if (type === "khoanh_khac" && momentKind === "video") {
       const videoUrl = fieldValue(form, "videoUrl");
@@ -413,14 +441,27 @@ export function ComposeForm() {
 
       {error && <FormError>{error}</FormError>}
 
-      <Button
-        type="submit"
-        className="self-start"
-        loading={busy}
-        loadingLabel="Đang lưu…"
-      >
-        Đăng
-      </Button>
+      <div className="flex items-center gap-3">
+        <Button
+          type="submit"
+          value="publish"
+          loading={busy}
+          loadingLabel="Đang lưu…"
+        >
+          Đăng
+        </Button>
+        {/* Video chỉ là dán link -> không có gì để lắng lại, không cần nháp. */}
+        {!(type === "khoanh_khac" && momentKind === "video") && (
+          <Button
+            type="submit"
+            value="draft"
+            variant="secondary"
+            disabled={busy}
+          >
+            Lưu nháp
+          </Button>
+        )}
+      </div>
     </form>
   );
 }
