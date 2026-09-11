@@ -48,7 +48,6 @@ export function PostAuthorActions({
       </Link>
       <form action={deletePostAction}>
         <input type="hidden" name="id" value={postId} />
-        <input type="hidden" name="slug" value={slug} />
         <button
           type="submit"
           onClick={(e) => {

@@ -5,8 +5,7 @@ import { mediaPublicUrl } from "@/lib/storage";
 import { postThumb, postTitle, POST_TYPE_LABEL } from "@/lib/post-type";
 import { formatPostDate } from "@/lib/date";
 import { MoodLabel } from "@/components/post/MoodBar";
-import { deletePostAction } from "@/features/compose/actions";
-import { Button } from "@/components/ui/Button";
+import { DeleteDraftButton } from "@/features/drafts/DeleteDraftButton";
 
 /**
  * Nháp trên /me — chưa đăng, chỉ tác giả thấy (RLS chặn anon).
@@ -26,6 +25,7 @@ export function DraftList({ drafts }: { drafts: Post[] }) {
         {drafts.map((post) => {
           const media = postThumb(post);
           const src = media?.path ? mediaPublicUrl(media.path) : null;
+          const title = postTitle(post);
           return (
             <li key={post.id} className="flex items-center gap-2 pr-3">
               <Link
@@ -45,7 +45,7 @@ export function DraftList({ drafts }: { drafts: Post[] }) {
                 </div>
                 <div className="flex min-w-0 flex-col gap-1">
                   <p className="line-clamp-1 text-sm text-text">
-                    {postTitle(post)}
+                    {title}
                   </p>
                   <div className="flex items-center gap-2 text-xs text-text-muted">
                     <span>{POST_TYPE_LABEL[post.type]}</span>
@@ -55,12 +55,7 @@ export function DraftList({ drafts }: { drafts: Post[] }) {
                   <MoodLabel mood={post.mood} />
                 </div>
               </Link>
-              <form action={deletePostAction}>
-                <input type="hidden" name="id" value={post.id} />
-                <Button type="submit" variant="danger" size="sm">
-                  Xoá
-                </Button>
-              </form>
+              <DeleteDraftButton id={post.id} title={title} />
             </li>
           );
         })}

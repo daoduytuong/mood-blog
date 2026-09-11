@@ -198,6 +198,8 @@ export async function getByIdForAuthor(
  * Đăng một nháp: đổi slug + bật is_published.
  * Hàm DUY NHẤT được sửa hai cột này — cố ý không nhồi vào `updatePost` để
  * trong codebase không tồn tại đường nào đổi slug của bài ĐÃ đăng.
+ * Tự chốt bằng `.eq("is_published", false)`: dù caller quên kiểm trước, hàm
+ * không bao giờ đổi slug một bài ĐÃ đăng (vỡ OG/sitemap/link đã chia sẻ).
  */
 export async function publishPost(
   sb: DB,
@@ -207,7 +209,8 @@ export async function publishPost(
   const { error } = await sb
     .from("posts")
     .update({ slug, is_published: true })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("is_published", false);
   if (error) throw error;
 }
 

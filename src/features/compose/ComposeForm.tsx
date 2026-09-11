@@ -400,29 +400,31 @@ export function ComposeForm({ draft }: { draft?: DraftInit } = {}) {
 
       {type === "khoanh_khac" ? (
         <div className="flex flex-col gap-4">
-          {/* Ảnh hay video */}
-          <div className="flex gap-1 self-start rounded-full border border-border p-1 text-xs">
-            {(
-              [
-                ["image", "Ảnh"],
-                ["video", "Video"],
-              ] as const
-            ).map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={momentKind === value}
-                onClick={() => setMomentKind(value)}
-                className={`rounded-full px-3 py-1 transition-colors ${
-                  momentKind === value
-                    ? "bg-accent text-on-accent"
-                    : "text-text-muted hover:text-text"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          {/* Ảnh hay video — nháp chỉ có ảnh, chọn Video ở đây không có tác dụng gì. */}
+          {!draft && (
+            <div className="flex gap-1 self-start rounded-full border border-border p-1 text-xs">
+              {(
+                [
+                  ["image", "Ảnh"],
+                  ["video", "Video"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={momentKind === value}
+                  onClick={() => setMomentKind(value)}
+                  className={`rounded-full px-3 py-1 transition-colors ${
+                    momentKind === value
+                      ? "bg-accent text-on-accent"
+                      : "text-text-muted hover:text-text"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
 
           {momentKind === "image" ? (
             <div className="flex flex-col gap-3">
@@ -577,6 +579,11 @@ export function ComposeForm({ draft }: { draft?: DraftInit } = {}) {
       </div>
 
       {error && <FormError>{error}</FormError>}
+      {/* "Lưu thay đổi" không chuyển trang (khác "Đăng") — không báo gì thì trang
+      trông y như chưa bấm, dễ khiến bấm lại. Chỉ một dòng chữ tĩnh, không toast. */}
+      {!error && updateState.ok && (
+        <p className="text-sm text-text-muted">Đã lưu.</p>
+      )}
 
       {/* Các nút hành động */}
       {(() => {

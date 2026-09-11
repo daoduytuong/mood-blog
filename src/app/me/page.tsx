@@ -91,7 +91,7 @@ export default async function MePage() {
             Soạn bài
           </Link>
         </div>
-      ) : (
+      ) : posts.length === 0 ? null : (
         <>
           {/* Dải tổng quan TĨNH — riêng tư, không so sánh, không animation. */}
           <div className="mt-6 flex gap-10 border-y border-border py-4">
