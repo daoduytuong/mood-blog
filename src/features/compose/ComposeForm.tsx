@@ -13,11 +13,12 @@ import {
   createGocDoc,
   createJourney,
   saveDraft,
+  updateDraft,
   type ComposeState,
 } from "./actions";
 import { resizeImage } from "./resize-image";
 import { MOOD_CODES, type MoodCode } from "@/lib/moods";
-import type { MediaItem } from "@/lib/db/types";
+import type { MediaItem, PostType as DbPostType } from "@/lib/db/types";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
 import { MoodChip } from "@/components/ui/Chip";
@@ -30,6 +31,16 @@ const MAX_IMAGES = 10;
 const initial: ComposeState = { error: null };
 type PostType = "khoanh_khac" | "goc_doc" | "hanh_trinh";
 type MomentKind = "image" | "video"; // Khoảnh khắc: ảnh hoặc video Vimeo
+
+export interface DraftInit {
+  id: string;
+  type: DbPostType;
+  mood: MoodCode;
+  caption: string;
+  excerpt: string;
+  linkUrl: string;
+  media: MediaItem[];
+}
 
 // YYYY-MM-DD theo giờ máy người dùng (giờ VN) — cho ô ngày của Hành trình.
 function localToday(): string {
@@ -80,18 +91,19 @@ function AltFields({
   );
 }
 
-export function ComposeForm() {
-  const [type, setType] = useState<PostType>("khoanh_khac");
+export function ComposeForm({ draft }: { draft?: DraftInit } = {}) {
+  const [type, setType] = useState<PostType>(draft?.type ?? "khoanh_khac");
   const [momentKind, setMomentKind] = useState<MomentKind>("image");
   const [imagesState, imagesAction] = useActionState(createMomentImages, initial);
   const [videoState, videoAction] = useActionState(createMomentVideo, initial);
   const [gocDocState, gocDocAction] = useActionState(createGocDoc, initial);
   const [journeyState, journeyAction] = useActionState(createJourney, initial);
   const [draftState, draftAction] = useActionState(saveDraft, initial);
+  const [updateState, updateAction] = useActionState(updateDraft, initial);
   // Ngày local (VN); SSR có thể ra ngày UTC khác trong 00:00–07:00 -> suppressHydrationWarning ở input.
   const [entryDate, setEntryDate] = useState(() => localToday());
   const [pending, startTransition] = useTransition();
-  const [mood, setMood] = useState<MoodCode | "">("");
+  const [mood, setMood] = useState<MoodCode | "">(draft?.mood ?? "");
   const [images, setImages] = useState<Picked[]>([]);
   const [uploading, setUploading] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -108,7 +120,8 @@ export function ComposeForm() {
     videoState.error ??
     gocDocState.error ??
     journeyState.error ??
-    draftState.error;
+    draftState.error ??
+    updateState.error;
 
   // Thu hồi tất cả blob URL khi unmount.
   useEffect(() => () => { imagesRef.current.forEach((im) => URL.revokeObjectURL(im.url)); }, []);
@@ -191,6 +204,19 @@ export function ComposeForm() {
       .submitter as HTMLButtonElement | null;
 
     if (submitter?.value === "draft") {
+      if (draft) {
+        // Sửa nháp: KHÔNG gửi media ở task này -> ảnh cũ giữ nguyên.
+        const fd = new FormData();
+        fd.set("id", draft.id);
+        fd.set("mood", mood);
+        fd.set("caption", caption);
+        if (type === "goc_doc") {
+          fd.set("linkUrl", fieldValue(form, "linkUrl"));
+          fd.set("excerpt", fieldValue(form, "excerpt"));
+        }
+        startTransition(() => updateAction(fd));
+        return;
+      }
       // Nháp: ảnh là TUỲ CHỌN (chưa có ảnh vẫn lưu được).
       const media = images.length > 0 ? await uploadPicked(images) : [];
       if (media === null) return; // uploadPicked đã setLocalError
@@ -259,29 +285,31 @@ export function ComposeForm() {
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-6">
       {/* Chọn loại bài */}
-      <div className="flex gap-1 self-start rounded-full border border-border p-1 text-sm">
-        {(
-          [
-            ["khoanh_khac", "Khoảnh khắc"],
-            ["goc_doc", "Góc đọc"],
-            ["hanh_trinh", "Hành trình"],
-          ] as const
-        ).map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            aria-pressed={type === value}
-            onClick={() => setType(value)}
-            className={`rounded-full px-3 py-1 transition-colors ${
-              type === value
-                ? "bg-accent text-on-accent"
-                : "text-text-muted hover:text-text"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      {!draft && (
+        <div className="flex gap-1 self-start rounded-full border border-border p-1 text-sm">
+          {(
+            [
+              ["khoanh_khac", "Khoảnh khắc"],
+              ["goc_doc", "Góc đọc"],
+              ["hanh_trinh", "Hành trình"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={type === value}
+              onClick={() => setType(value)}
+              className={`rounded-full px-3 py-1 transition-colors ${
+                type === value
+                  ? "bg-accent text-on-accent"
+                  : "text-text-muted hover:text-text"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {type === "khoanh_khac" ? (
         <div className="flex flex-col gap-4">
@@ -399,10 +427,16 @@ export function ComposeForm() {
         </div>
       ) : (
         <div className="flex flex-col gap-4">
-          <Input type="url" name="linkUrl" placeholder="Dán link (tuỳ chọn)" />
+          <Input
+            type="url"
+            name="linkUrl"
+            defaultValue={draft?.linkUrl ?? ""}
+            placeholder="Dán link (tuỳ chọn)"
+          />
           <Textarea
             name="excerpt"
             rows={3}
+            defaultValue={draft?.excerpt ?? ""}
             placeholder="Một đoạn bạn tâm đắc…"
             className="italic"
             style={{ fontFamily: "var(--font-serif)" }}
@@ -414,6 +448,7 @@ export function ComposeForm() {
       <Textarea
         name="caption"
         rows={3}
+        defaultValue={draft?.caption ?? ""}
         placeholder={
           type === "khoanh_khac"
             ? "Hôm nay bạn thấy thế nào?"
@@ -442,23 +477,25 @@ export function ComposeForm() {
       {error && <FormError>{error}</FormError>}
 
       <div className="flex items-center gap-3">
-        <Button
-          type="submit"
-          value="publish"
-          loading={busy}
-          loadingLabel="Đang lưu…"
-        >
-          Đăng
-        </Button>
+        {!draft && (
+          <Button
+            type="submit"
+            value="publish"
+            loading={busy}
+            loadingLabel="Đang lưu…"
+          >
+            Đăng
+          </Button>
+        )}
         {/* Video chỉ là dán link -> không có gì để lắng lại, không cần nháp. */}
         {!(type === "khoanh_khac" && momentKind === "video") && (
           <Button
             type="submit"
             value="draft"
-            variant="secondary"
+            variant={draft ? "primary" : "secondary"}
             disabled={busy}
           >
-            Lưu nháp
+            {draft ? "Lưu thay đổi" : "Lưu nháp"}
           </Button>
         )}
       </div>

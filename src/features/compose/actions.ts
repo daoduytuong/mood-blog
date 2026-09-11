@@ -356,6 +356,61 @@ export async function saveDraft(
   redirect("/me");
 }
 
+/** Sửa nháp: chữ + tâm trạng. Từ chối nếu bài đã đăng. */
+export async function updateDraft(
+  _prev: ComposeState,
+  formData: FormData,
+): Promise<ComposeState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Bạn cần đăng nhập đã nhé." };
+
+  const id = String(formData.get("id") ?? "");
+  if (!id) return { error: "Thiếu thông tin bài, thử lại nhé." };
+
+  const existing = await getByIdForAuthor(supabase, id);
+  if (!existing || existing.authorId !== user.id)
+    return { error: "Không tìm thấy bài." };
+  // Bất biến: bài ĐÃ đăng không đi qua đường nháp (kiểm ở SERVER, không chỉ ở UI).
+  if (existing.isPublished) return { error: "Bài này đã đăng rồi." };
+
+  const mood = String(formData.get("mood") ?? "");
+  if (!MOOD_CODES.includes(mood as MoodCode))
+    return { error: "Chọn một tâm trạng giúp mình nhé." };
+
+  const caption = String(formData.get("caption") ?? "").trim();
+  const patch: Parameters<typeof updatePost>[2] = {
+    mood: mood as MoodCode,
+    caption: caption || null,
+  };
+
+  if (existing.type === "goc_doc") {
+    const excerpt = String(formData.get("excerpt") ?? "").trim();
+    const linkUrl = String(formData.get("linkUrl") ?? "").trim();
+    if (!linkUrl && !excerpt)
+      return { error: "Thêm một link hoặc đoạn trích nhé." };
+    if (linkUrl) {
+      try {
+        new URL(linkUrl);
+      } catch {
+        return { error: "Link chưa hợp lệ, kiểm lại nhé." };
+      }
+    }
+    patch.excerpt = excerpt || null;
+    patch.linkUrl = linkUrl || null;
+  }
+
+  try {
+    await updatePost(supabase, id, patch);
+  } catch {
+    return { error: "Chưa lưu được, thử lại nhé." };
+  }
+  // Nháp không nằm trên trang công khai nào -> không revalidate.
+  return { error: null, ok: true };
+}
+
 // Khoảnh khắc ẢNH (1..N) — ảnh đã được client upload lên Storage; action chỉ insert post.
 export async function createMomentImages(
   _prev: ComposeState,
