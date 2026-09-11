@@ -6,6 +6,9 @@ import { createClient } from "@/lib/supabase/server";
 import {
   createPost,
   getBySlug,
+  getByIdForAuthor,
+  publishPost,
+  slugExists,
   updatePost,
   deletePost,
 } from "@/lib/db/posts";
@@ -29,7 +32,7 @@ async function uniqueSlug(
 ): Promise<string> {
   const base = slugify(hint) || `${fallbackPrefix}-${Date.now().toString(36)}`;
   let slug = base;
-  for (let i = 2; await getBySlug(supabase, slug); i++) slug = `${base}-${i}`;
+  for (let i = 2; await slugExists(supabase, slug); i++) slug = `${base}-${i}`;
   return slug;
 }
 
@@ -482,6 +485,8 @@ export async function updatePostAction(
 }
 
 // Story 1.7 — xoá bài (hearts cascade theo FK -> tổng tim /me tự rụng).
+// Đọc theo ID, KHÔNG theo slug: `getBySlug` lọc `is_published = true` nên bản
+// cũ không xoá nổi NHÁP. Đọc theo id cũng bớt mong manh khi dọn Storage.
 export async function deletePostAction(formData: FormData): Promise<void> {
   const supabase = await createClient();
   const {
@@ -490,25 +495,32 @@ export async function deletePostAction(formData: FormData): Promise<void> {
   if (!user) redirect("/login");
 
   const id = String(formData.get("id") ?? "");
-  const slug = String(formData.get("slug") ?? "");
   if (!id) redirect("/");
 
+  const existing = await getByIdForAuthor(supabase, id);
+  if (!existing || existing.authorId !== user.id) redirect("/");
+
+  const wasPublished = existing.isPublished;
+  const slug = existing.slug;
+
   // Dọn ảnh ở Storage (best-effort) trước khi xoá hàng — tránh rác.
-  const existing = slug ? await getBySlug(supabase, slug) : null;
-  if (existing && existing.authorId === user.id) {
-    const paths = existing.media
-      .map((m) => m.path)
-      .filter((p): p is string => !!p);
-    if (paths.length) await supabase.storage.from("media").remove(paths);
-  }
+  const paths = existing.media
+    .map((m) => m.path)
+    .filter((p): p is string => !!p);
+  if (paths.length) await supabase.storage.from("media").remove(paths);
 
   try {
     await deletePost(supabase, id); // RLS đảm bảo chỉ author xoá được
   } catch {
-    redirect(`/m/${slug}`); // xoá hụt -> quay lại bài, không nuốt lỗi âm thầm
+    // Xoá hụt -> quay lại chỗ vừa đứng, không nuốt lỗi âm thầm.
+    redirect(wasPublished ? `/m/${slug}` : "/me");
   }
 
-  if (slug) revalidatePath(`/m/${slug}`);
-  revalidatePath("/");
-  redirect("/");
+  // Nháp chưa từng nằm trên trang công khai nào -> không cần revalidate.
+  if (wasPublished) {
+    revalidatePath(`/m/${slug}`);
+    revalidatePath("/");
+    redirect("/");
+  }
+  redirect("/me");
 }
