@@ -7,7 +7,6 @@ import {
   createPost,
   getBySlug,
   getByIdForAuthor,
-  publishPost,
   slugExists,
   updatePost,
   deletePost,
