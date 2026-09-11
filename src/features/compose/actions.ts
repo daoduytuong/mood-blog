@@ -356,7 +356,7 @@ export async function saveDraft(
   redirect("/me");
 }
 
-/** Sửa nháp: chữ + tâm trạng. Từ chối nếu bài đã đăng. */
+/** Sửa nháp: chữ + tâm trạng + ảnh. Từ chối nếu bài đã đăng. */
 export async function updateDraft(
   _prev: ComposeState,
   formData: FormData,
@@ -402,11 +402,47 @@ export async function updateDraft(
     patch.linkUrl = linkUrl || null;
   }
 
+  // Ảnh: client gửi mảng CUỐI CÙNG (ảnh cũ giữ nguyên path, ảnh mới đã upload).
+  // Không gửi field `media` -> giữ nguyên ảnh cũ (đường đi của Task 4).
+  const rawMedia = formData.get("media");
+  let removedPaths: string[] = [];
+  if (rawMedia !== null) {
+    let media: MediaItem[] = [];
+    try {
+      media = sanitizeImageMedia(JSON.parse(String(rawMedia)), user.id);
+    } catch {
+      return { error: "Danh sách ảnh không hợp lệ, thử lại nhé." };
+    }
+    if (media.length > MAX_IMAGES) media = media.slice(0, MAX_IMAGES);
+
+    // QUAN TRỌNG: `sanitizeImageMedia` chỉ giữ path/w/h/blurDataURL/alt — nó
+    // DROP `date` và `note` của chặng. Với Hành trình phải gắn lại từ form,
+    // không thì ngày/ghi chú của chặng rụng mỗi lần lưu nháp. Nháp Hành trình
+    // chỉ có MỘT chặng nên cắt về `media[0]` là đúng (xem mục Phạm vi).
+    if (existing.type === "hanh_trinh" && media[0]) {
+      const meta = sanitizeEntryMeta(formData.get("note"), formData.get("date"));
+      media = [{ ...media[0], ...meta }];
+    }
+
+    // Ảnh có trong bài cũ mà không còn trong mảng mới -> rác, dọn SAU khi lưu.
+    const keep = new Set(media.map((m) => m.path).filter(Boolean));
+    removedPaths = existing.media
+      .map((m) => m.path)
+      .filter((p): p is string => !!p && !keep.has(p));
+
+    patch.media = media;
+  }
+
   try {
     await updatePost(supabase, id, patch);
   } catch {
     return { error: "Chưa lưu được, thử lại nhé." };
   }
+
+  // DB đã trỏ danh sách mới -> gỡ ảnh cũ (best-effort; hụt cũng không hỏng bài).
+  if (removedPaths.length)
+    await supabase.storage.from("media").remove(removedPaths);
+
   // Nháp không nằm trên trang công khai nào -> không revalidate.
   return { error: null, ok: true };
 }

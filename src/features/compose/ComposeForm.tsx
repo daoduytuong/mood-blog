@@ -20,6 +20,7 @@ import { resizeImage } from "./resize-image";
 import { MOOD_CODES, type MoodCode } from "@/lib/moods";
 import type { MediaItem, PostType as DbPostType } from "@/lib/db/types";
 import { createClient } from "@/lib/supabase/client";
+import { mediaPublicUrl } from "@/lib/storage";
 import { Button } from "@/components/ui/Button";
 import { MoodChip } from "@/components/ui/Chip";
 import { FormError } from "@/components/ui/Field";
@@ -47,7 +48,24 @@ function localToday(): string {
   return new Date().toLocaleDateString("en-CA");
 }
 
-type Picked = { file: File; url: string; alt: string };
+/**
+ * Một ô ảnh trong form. Hai dạng dùng CHUNG mọi thao tác (xoá, nhập alt, thứ tự):
+ * - "existing": đã nằm trên Storage (mở lại nháp) — có `path`, không có `File`.
+ * - "new": vừa chọn từ máy, chưa resize/upload — có `File` + blob URL.
+ */
+type Slot =
+  | { kind: "existing"; item: MediaItem; alt: string }
+  | { kind: "new"; file: File; url: string; alt: string };
+
+/** Ảnh để xem trước: ảnh cũ lấy URL công khai, ảnh mới lấy blob URL. */
+function slotPreview(s: Slot): string {
+  return s.kind === "existing" ? mediaPublicUrl(s.item.path!) : s.url;
+}
+
+/** Khoá React ổn định cho từng ô. */
+function slotKey(s: Slot): string {
+  return s.kind === "existing" ? `e:${s.item.path}` : `n:${s.url}`;
+}
 
 const MAX_ALT = 200; // khớp mức cắt ở actions.ts (server vẫn là nơi chốt)
 
@@ -56,32 +74,36 @@ const MAX_ALT = 200; // khớp mức cắt ở actions.ts (server vẫn là nơi
  * Không nhét vào lưới 3 cột: ô nhập ~100px trên mobile thì không gõ nổi.
  */
 function AltFields({
-  images,
+  slots,
   onChange,
 }: {
-  images: Picked[];
+  slots: Slot[];
   onChange: (index: number, alt: string) => void;
 }) {
-  if (images.length === 0) return null;
+  if (slots.length === 0) return null;
   return (
     <div className="flex flex-col gap-2">
       <p className="text-xs text-text-muted">
         Mô tả ảnh (tuỳ chọn) — cho người dùng trình đọc màn hình.
       </p>
-      {images.map((im, i) => (
-        <div key={im.url} className="flex items-center gap-2">
+      {slots.map((s, i) => (
+        <div key={slotKey(s)} className="flex items-center gap-2">
           <span className="h-10 w-10 shrink-0 overflow-hidden rounded-md border border-border">
-            {/* eslint-disable-next-line @next/next/no-img-element -- preview blob tạm */}
-            <img src={im.url} alt="" className="h-full w-full object-cover" />
+            {/* eslint-disable-next-line @next/next/no-img-element -- preview (blob hoac URL Storage) */}
+            <img
+              src={slotPreview(s)}
+              alt=""
+              className="h-full w-full object-cover"
+            />
           </span>
           <Input
             type="text"
-            value={im.alt}
+            value={s.alt}
             maxLength={MAX_ALT}
             onChange={(e) => onChange(i, e.target.value)}
             aria-label={`Mô tả ảnh ${i + 1}`}
             placeholder={
-              images.length > 1 ? `Trong ảnh ${i + 1} có gì?` : "Trong ảnh có gì?"
+              slots.length > 1 ? `Trong ảnh ${i + 1} có gì?` : "Trong ảnh có gì?"
             }
             className="flex-1"
           />
@@ -104,14 +126,20 @@ export function ComposeForm({ draft }: { draft?: DraftInit } = {}) {
   const [entryDate, setEntryDate] = useState(() => localToday());
   const [pending, startTransition] = useTransition();
   const [mood, setMood] = useState<MoodCode | "">(draft?.mood ?? "");
-  const [images, setImages] = useState<Picked[]>([]);
+  const [slots, setSlots] = useState<Slot[]>(() =>
+    (draft?.media ?? [])
+      .filter((m) => !!m.path)
+      .map((item) => ({ kind: "existing" as const, item, alt: item.alt ?? "" })),
+  );
+  const slotsRef = useRef<Slot[]>(slots);
   const [uploading, setUploading] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const imagesRef = useRef<Picked[]>([]);
 
-  // Giữ ref đồng bộ để cleanup effect đọc được bản mới nhất (tránh stale closure).
-  useEffect(() => { imagesRef.current = images; });
+  // Giữ ref đồng bộ để cleanup effect đọc bản mới nhất (tránh stale closure).
+  useEffect(() => {
+    slotsRef.current = slots;
+  });
 
   const busy = pending || uploading;
   const error =
@@ -123,28 +151,42 @@ export function ComposeForm({ draft }: { draft?: DraftInit } = {}) {
     draftState.error ??
     updateState.error;
 
-  // Thu hồi tất cả blob URL khi unmount.
-  useEffect(() => () => { imagesRef.current.forEach((im) => URL.revokeObjectURL(im.url)); }, []);
+  // Thu hồi blob URL khi unmount — CHỈ ô "new" mới có blob.
+  useEffect(
+    () => () => {
+      slotsRef.current.forEach((s) => {
+        if (s.kind === "new") URL.revokeObjectURL(s.url);
+      });
+    },
+    [],
+  );
 
   function onPickFiles(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
-    setImages((prev) => {
+    setSlots((prev) => {
       const room = MAX_IMAGES - prev.length;
-      const add = files
-        .slice(0, Math.max(0, room))
-        .map((file) => ({ file, url: URL.createObjectURL(file), alt: "" }));
+      const add = files.slice(0, Math.max(0, room)).map(
+        (file) =>
+          ({
+            kind: "new" as const,
+            file,
+            url: URL.createObjectURL(file),
+            alt: "",
+          }),
+      );
       return [...prev, ...add];
     });
     e.target.value = ""; // cho chọn lại cùng file
   }
 
   function setAlt(i: number, alt: string) {
-    setImages((prev) => prev.map((im, k) => (k === i ? { ...im, alt } : im)));
+    setSlots((prev) => prev.map((s, k) => (k === i ? { ...s, alt } : s)));
   }
 
   function removeImage(i: number) {
-    setImages((prev) => {
-      URL.revokeObjectURL(prev[i].url);
+    setSlots((prev) => {
+      const s = prev[i];
+      if (s?.kind === "new") URL.revokeObjectURL(s.url);
       return prev.filter((_, k) => k !== i);
     });
   }
@@ -157,29 +199,50 @@ export function ComposeForm({ draft }: { draft?: DraftInit } = {}) {
     return el?.value.trim() ?? "";
   }
 
-  // Resize + upload các ảnh đã chọn lên Storage. Trả null nếu lỗi (đã setLocalError).
-  async function uploadPicked(list: Picked[]): Promise<MediaItem[] | null> {
+  /**
+   * Dựng mảng media CUỐI CÙNG theo đúng thứ tự đang hiện trên form:
+   * ô "existing" đi qua nguyên vẹn (chỉ cập nhật alt), ô "new" mới resize+upload.
+   * Trả null nếu lỗi (đã setLocalError).
+   */
+  async function uploadSlots(list: Slot[]): Promise<MediaItem[] | null> {
+    if (list.length === 0) return [];
     setUploading(true);
     try {
       const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setLocalError("Bạn cần đăng nhập đã nhé."); return null; }
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        setLocalError("Bạn cần đăng nhập đã nhé.");
+        return null;
+      }
       const media: MediaItem[] = [];
-      for (const im of list) {
+      for (const s of list) {
+        if (s.kind === "existing") {
+          media.push({ ...s.item, alt: s.alt.trim() || undefined });
+          continue;
+        }
         let r;
-        try { r = await resizeImage(im.file); }
-        catch { setLocalError("Một tấm ảnh chưa xử lý được, thử ảnh khác nhé."); return null; }
+        try {
+          r = await resizeImage(s.file);
+        } catch {
+          setLocalError("Một tấm ảnh chưa xử lý được, thử ảnh khác nhé.");
+          return null;
+        }
         const path = `${user.id}/${crypto.randomUUID()}.webp`;
         const { error: upErr } = await supabase.storage
           .from("media")
           .upload(path, r.blob, { contentType: "image/webp", upsert: false });
-        if (upErr) { setLocalError("Chưa tải được ảnh lên, thử lại nhé."); return null; }
+        if (upErr) {
+          setLocalError("Chưa tải được ảnh lên, thử lại nhé.");
+          return null;
+        }
         media.push({
           path,
           w: r.width,
           h: r.height,
           blurDataURL: r.blurDataURL,
-          alt: im.alt.trim() || undefined,
+          alt: s.alt.trim() || undefined,
         });
       }
       return media;
@@ -205,21 +268,27 @@ export function ComposeForm({ draft }: { draft?: DraftInit } = {}) {
 
     if (submitter?.value === "draft") {
       if (draft) {
-        // Sửa nháp: KHÔNG gửi media ở task này -> ảnh cũ giữ nguyên.
+        const media = await uploadSlots(slots);
+        if (media === null) return;
         const fd = new FormData();
         fd.set("id", draft.id);
         fd.set("mood", mood);
         fd.set("caption", caption);
+        fd.set("media", JSON.stringify(media));
         if (type === "goc_doc") {
           fd.set("linkUrl", fieldValue(form, "linkUrl"));
           fd.set("excerpt", fieldValue(form, "excerpt"));
+        }
+        if (type === "hanh_trinh") {
+          fd.set("note", fieldValue(form, "entryNote"));
+          fd.set("date", entryDate || localToday());
         }
         startTransition(() => updateAction(fd));
         return;
       }
       // Nháp: ảnh là TUỲ CHỌN (chưa có ảnh vẫn lưu được).
-      const media = images.length > 0 ? await uploadPicked(images) : [];
-      if (media === null) return; // uploadPicked đã setLocalError
+      const media = await uploadSlots(slots);
+      if (media === null) return; // uploadSlots đã setLocalError
       const fd = new FormData();
       fd.set("type", type);
       fd.set("mood", mood);
@@ -246,8 +315,8 @@ export function ComposeForm({ draft }: { draft?: DraftInit } = {}) {
       fd.set("videoUrl", videoUrl);
       startTransition(() => videoAction(fd));
     } else if (type === "khoanh_khac") {
-      if (images.length === 0) return setLocalError("Thêm ít nhất một tấm ảnh nhé.");
-      const media = await uploadPicked(images);
+      if (slots.length === 0) return setLocalError("Thêm ít nhất một tấm ảnh nhé.");
+      const media = await uploadSlots(slots);
       if (!media) return;
       const fd = new FormData();
       fd.set("caption", caption);
@@ -255,11 +324,11 @@ export function ComposeForm({ draft }: { draft?: DraftInit } = {}) {
       fd.set("media", JSON.stringify(media));
       startTransition(() => imagesAction(fd));
     } else if (type === "hanh_trinh") {
-      if (images.length === 0)
+      if (slots.length === 0)
         return setLocalError("Thêm một tấm ảnh cho chặng đầu tiên nhé.");
-      if (images.length > 1)
+      if (slots.length > 1)
         return setLocalError("Hành trình mỗi chặng chỉ một ảnh — bỏ bớt nhé.");
-      const media = await uploadPicked(images);
+      const media = await uploadSlots(slots);
       if (!media) return;
       const fd = new FormData();
       fd.set("caption", caption);
@@ -340,10 +409,17 @@ export function ComposeForm({ draft }: { draft?: DraftInit } = {}) {
           {momentKind === "image" ? (
             <div className="flex flex-col gap-3">
               <div className="grid grid-cols-3 gap-2">
-                {images.map((im, i) => (
-                  <div key={im.url} className="relative aspect-square overflow-hidden rounded-md border border-border">
-                    {/* eslint-disable-next-line @next/next/no-img-element -- preview blob tạm */}
-                    <img src={im.url} alt="" className="h-full w-full object-cover" />
+                {slots.map((s, i) => (
+                  <div
+                    key={slotKey(s)}
+                    className="relative aspect-square overflow-hidden rounded-md border border-border"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element -- preview (blob hoac URL Storage) */}
+                    <img
+                      src={slotPreview(s)}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
                     <button
                       type="button"
                       onClick={() => removeImage(i)}
@@ -352,7 +428,7 @@ export function ComposeForm({ draft }: { draft?: DraftInit } = {}) {
                     >×</button>
                   </div>
                 ))}
-                {images.length < MAX_IMAGES && (
+                {slots.length < MAX_IMAGES && (
                   <button
                     type="button"
                     onClick={() => fileRef.current?.click()}
@@ -362,7 +438,7 @@ export function ComposeForm({ draft }: { draft?: DraftInit } = {}) {
               </div>
               <input ref={fileRef} type="file" accept="image/*" multiple onChange={onPickFiles} className="hidden" />
               <p className="text-xs text-text-muted">Tối đa {MAX_IMAGES} ảnh · vuốt để xem trong feed.</p>
-              <AltFields images={images} onChange={setAlt} />
+              <AltFields slots={slots} onChange={setAlt} />
             </div>
           ) : (
             <div className="flex flex-col gap-2">
@@ -381,10 +457,17 @@ export function ComposeForm({ draft }: { draft?: DraftInit } = {}) {
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-3">
             <div className="grid grid-cols-3 gap-2">
-              {images.map((im, i) => (
-                <div key={im.url} className="relative aspect-square overflow-hidden rounded-md border border-border">
-                  {/* eslint-disable-next-line @next/next/no-img-element -- preview blob tạm */}
-                  <img src={im.url} alt="" className="h-full w-full object-cover" />
+              {slots.map((s, i) => (
+                <div
+                  key={slotKey(s)}
+                  className="relative aspect-square overflow-hidden rounded-md border border-border"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element -- preview (blob hoac URL Storage) */}
+                  <img
+                    src={slotPreview(s)}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
                   <button
                     type="button"
                     onClick={() => removeImage(i)}
@@ -393,7 +476,7 @@ export function ComposeForm({ draft }: { draft?: DraftInit } = {}) {
                   >×</button>
                 </div>
               ))}
-              {images.length < 1 && (
+              {slots.length < 1 && (
                 <button
                   type="button"
                   onClick={() => fileRef.current?.click()}
@@ -405,7 +488,7 @@ export function ComposeForm({ draft }: { draft?: DraftInit } = {}) {
             <p className="text-xs text-text-muted">
               Một ảnh cho chặng đầu tiên · các chặng sau thêm ngay trên trang bài.
             </p>
-            <AltFields images={images} onChange={setAlt} />
+            <AltFields slots={slots} onChange={setAlt} />
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
             <Input
