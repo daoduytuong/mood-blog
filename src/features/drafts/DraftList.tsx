@@ -5,6 +5,8 @@ import { mediaPublicUrl } from "@/lib/storage";
 import { postThumb, postTitle, POST_TYPE_LABEL } from "@/lib/post-type";
 import { formatPostDate } from "@/lib/date";
 import { MoodLabel } from "@/components/post/MoodBar";
+import { deletePostAction } from "@/features/compose/actions";
+import { Button } from "@/components/ui/Button";
 
 /**
  * Nháp trên /me — chưa đăng, chỉ tác giả thấy (RLS chặn anon).
@@ -25,10 +27,10 @@ export function DraftList({ drafts }: { drafts: Post[] }) {
           const media = postThumb(post);
           const src = media?.path ? mediaPublicUrl(media.path) : null;
           return (
-            <li key={post.id}>
+            <li key={post.id} className="flex items-center gap-2 pr-3">
               <Link
                 href={`/me/nhap/${post.id}`}
-                className="flex items-center gap-3 p-3 transition-colors hover:bg-background"
+                className="flex min-w-0 flex-1 items-center gap-3 p-3 transition-colors hover:bg-background"
               >
                 <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-sm bg-border/40">
                   {src && (
@@ -53,6 +55,12 @@ export function DraftList({ drafts }: { drafts: Post[] }) {
                   <MoodLabel mood={post.mood} />
                 </div>
               </Link>
+              <form action={deletePostAction}>
+                <input type="hidden" name="id" value={post.id} />
+                <Button type="submit" variant="danger" size="sm">
+                  Xoá
+                </Button>
+              </form>
             </li>
           );
         })}
