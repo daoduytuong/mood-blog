@@ -578,11 +578,14 @@ export function ComposeForm({ draft }: { draft?: DraftInit } = {}) {
 
       {error && <FormError>{error}</FormError>}
 
-      <div className="flex items-center gap-3">
-        <Button type="submit" value="publish" loading={busy} loadingLabel="Đang lưu…">
-          Đăng
-        </Button>
-        {!(type === "khoanh_khac" && momentKind === "video") && (
+      {/* Các nút hành động */}
+      {(() => {
+        const publishButton = (
+          <Button type="submit" value="publish" loading={busy} loadingLabel="Đang lưu…">
+            Đăng
+          </Button>
+        );
+        const saveButton = !(type === "khoanh_khac" && momentKind === "video") && (
           <Button
             type="submit"
             value="draft"
@@ -591,8 +594,26 @@ export function ComposeForm({ draft }: { draft?: DraftInit } = {}) {
           >
             {draft ? "Lưu thay đổi" : "Lưu nháp"}
           </Button>
-        )}
-      </div>
+        );
+        return (
+          <div className="flex items-center gap-3">
+            {draft ? (
+              <>
+                {/* Khi sửa nháp: Enter trong ô một-dòng submit vào nút đầu tiên.
+                Nút đầu phải là nút an toàn (lưu), chứ không phải đăng liền
+                rồi mất hành trang lùi. */}
+                {saveButton}
+                {publishButton}
+              </>
+            ) : (
+              <>
+                {publishButton}
+                {saveButton}
+              </>
+            )}
+          </div>
+        );
+      })()}
     </form>
   );
 }
