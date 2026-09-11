@@ -273,6 +273,22 @@ export function ComposeForm({ draft }: { draft?: DraftInit } = {}) {
       if (draft) {
         const media = await uploadSlots(slots);
         if (media === null) return;
+        // Upload xong -> ảnh ĐÃ nằm trên Storage, nên hạ mọi ô về "existing" NGAY
+        // (form không redirect, nó còn đó sau khi lưu). Lần "Lưu thay đổi" sau
+        // chúng đi qua nguyên vẹn: không resize+upload lại thành path mới rồi để
+        // server dọn path cũ — đốt quota Storage cho đúng bấy nhiêu bytes.
+        // Đúng cả khi lưu hụt: ảnh vẫn trên Storage, `keep` của server vẫn chứa
+        // path đó nên lần lưu lại `removedPaths` ra rỗng.
+        slots.forEach((s) => {
+          if (s.kind === "new") URL.revokeObjectURL(s.url);
+        });
+        setSlots(
+          media.map((item) => ({
+            kind: "existing" as const,
+            item,
+            alt: item.alt ?? "",
+          })),
+        );
         const fd = new FormData();
         fd.set("id", draft.id);
         fd.set("mood", mood);
