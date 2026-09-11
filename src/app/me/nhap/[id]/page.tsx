@@ -44,6 +44,8 @@ export default async function EditDraftPage({
             excerpt: post.excerpt ?? "",
             linkUrl: post.linkUrl ?? "",
             media: post.media,
+            date: post.media[0]?.date,
+            note: post.media[0]?.note,
           }}
         />
       </div>

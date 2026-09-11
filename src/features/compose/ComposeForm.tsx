@@ -41,6 +41,9 @@ export interface DraftInit {
   excerpt: string;
   linkUrl: string;
   media: MediaItem[];
+  /** Hành trình: ngày + ghi chú của chặng đầu (nháp chỉ có một chặng). */
+  date?: string;
+  note?: string;
 }
 
 // YYYY-MM-DD theo giờ máy người dùng (giờ VN) — cho ô ngày của Hành trình.
@@ -123,7 +126,7 @@ export function ComposeForm({ draft }: { draft?: DraftInit } = {}) {
   const [draftState, draftAction] = useActionState(saveDraft, initial);
   const [updateState, updateAction] = useActionState(updateDraft, initial);
   // Ngày local (VN); SSR có thể ra ngày UTC khác trong 00:00–07:00 -> suppressHydrationWarning ở input.
-  const [entryDate, setEntryDate] = useState(() => localToday());
+  const [entryDate, setEntryDate] = useState(() => draft?.date ?? localToday());
   const [pending, startTransition] = useTransition();
   const [mood, setMood] = useState<MoodCode | "">(draft?.mood ?? "");
   const [slots, setSlots] = useState<Slot[]>(() =>
@@ -503,6 +506,7 @@ export function ComposeForm({ draft }: { draft?: DraftInit } = {}) {
               type="text"
               name="entryNote"
               maxLength={500}
+              defaultValue={draft?.note ?? ""}
               placeholder="Ghi chú chặng này (tuỳ chọn)"
               className="flex-1"
             />
