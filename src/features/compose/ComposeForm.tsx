@@ -14,6 +14,7 @@ import {
   createJourney,
   saveDraft,
   updateDraft,
+  publishDraft,
   type ComposeState,
 } from "./actions";
 import { resizeImage } from "./resize-image";
@@ -125,6 +126,7 @@ export function ComposeForm({ draft }: { draft?: DraftInit } = {}) {
   const [journeyState, journeyAction] = useActionState(createJourney, initial);
   const [draftState, draftAction] = useActionState(saveDraft, initial);
   const [updateState, updateAction] = useActionState(updateDraft, initial);
+  const [publishState, publishAction] = useActionState(publishDraft, initial);
   // Ngày local (VN); SSR có thể ra ngày UTC khác trong 00:00–07:00 -> suppressHydrationWarning ở input.
   const [entryDate, setEntryDate] = useState(() => draft?.date ?? localToday());
   const [pending, startTransition] = useTransition();
@@ -152,7 +154,8 @@ export function ComposeForm({ draft }: { draft?: DraftInit } = {}) {
     gocDocState.error ??
     journeyState.error ??
     draftState.error ??
-    updateState.error;
+    updateState.error ??
+    publishState.error;
 
   // Thu hồi blob URL khi unmount — CHỈ ô "new" mới có blob.
   useEffect(
@@ -269,42 +272,38 @@ export function ComposeForm({ draft }: { draft?: DraftInit } = {}) {
     const submitter = (e.nativeEvent as SubmitEvent)
       .submitter as HTMLButtonElement | null;
 
-    if (submitter?.value === "draft") {
-      if (draft) {
-        const media = await uploadSlots(slots);
-        if (media === null) return;
-        // Upload xong -> ảnh ĐÃ nằm trên Storage, nên hạ mọi ô về "existing" NGAY
-        // (form không redirect, nó còn đó sau khi lưu). Lần "Lưu thay đổi" sau
-        // chúng đi qua nguyên vẹn: không resize+upload lại thành path mới rồi để
-        // server dọn path cũ — đốt quota Storage cho đúng bấy nhiêu bytes.
-        // Đúng cả khi lưu hụt: ảnh vẫn trên Storage, `keep` của server vẫn chứa
-        // path đó nên lần lưu lại `removedPaths` ra rỗng.
-        slots.forEach((s) => {
-          if (s.kind === "new") URL.revokeObjectURL(s.url);
-        });
-        setSlots(
-          media.map((item) => ({
-            kind: "existing" as const,
-            item,
-            alt: item.alt ?? "",
-          })),
-        );
-        const fd = new FormData();
-        fd.set("id", draft.id);
-        fd.set("mood", mood);
-        fd.set("caption", caption);
-        fd.set("media", JSON.stringify(media));
-        if (type === "goc_doc") {
-          fd.set("linkUrl", fieldValue(form, "linkUrl"));
-          fd.set("excerpt", fieldValue(form, "excerpt"));
-        }
-        if (type === "hanh_trinh") {
-          fd.set("note", fieldValue(form, "entryNote"));
-          fd.set("date", entryDate || localToday());
-        }
-        startTransition(() => updateAction(fd));
-        return;
+    if (draft) {
+      const media = await uploadSlots(slots);
+      if (media === null) return;
+      // Upload xong -> ảnh ĐÃ nằm trên Storage, nên hạ mọi ô về "existing" NGAY
+      // (form không redirect, nó còn đó sau khi lưu). Lần "Lưu thay đổi" sau
+      // chúng đi qua nguyên vẹn: không resize+upload lại thành path mới rồi để
+      // server dọn path cũ — đốt quota Storage cho đúng bấy nhiêu bytes.
+      // Đúng cả khi lưu hụt: ảnh vẫn trên Storage, `keep` của server vẫn chứa
+      // path đó nên lần lưu lại `removedPaths` ra rỗng.
+      slots.forEach((s) => {
+        if (s.kind === "new") URL.revokeObjectURL(s.url);
+      });
+      setSlots(media.map((item) => ({ kind: "existing" as const, item, alt: item.alt ?? "" })));
+      const fd = new FormData();
+      fd.set("id", draft.id);
+      fd.set("mood", mood);
+      fd.set("caption", caption);
+      fd.set("media", JSON.stringify(media));
+      if (type === "goc_doc") {
+        fd.set("linkUrl", fieldValue(form, "linkUrl"));
+        fd.set("excerpt", fieldValue(form, "excerpt"));
       }
+      if (type === "hanh_trinh") {
+        fd.set("note", fieldValue(form, "entryNote"));
+        fd.set("date", entryDate || localToday());
+      }
+      const act = submitter?.value === "draft" ? updateAction : publishAction;
+      startTransition(() => act(fd));
+      return;
+    }
+
+    if (submitter?.value === "draft") {
       // Nháp: ảnh là TUỲ CHỌN (chưa có ảnh vẫn lưu được).
       const media = await uploadSlots(slots);
       if (media === null) return; // uploadSlots đã setLocalError
@@ -580,22 +579,14 @@ export function ComposeForm({ draft }: { draft?: DraftInit } = {}) {
       {error && <FormError>{error}</FormError>}
 
       <div className="flex items-center gap-3">
-        {!draft && (
-          <Button
-            type="submit"
-            value="publish"
-            loading={busy}
-            loadingLabel="Đang lưu…"
-          >
-            Đăng
-          </Button>
-        )}
-        {/* Video chỉ là dán link -> không có gì để lắng lại, không cần nháp. */}
+        <Button type="submit" value="publish" loading={busy} loadingLabel="Đang lưu…">
+          Đăng
+        </Button>
         {!(type === "khoanh_khac" && momentKind === "video") && (
           <Button
             type="submit"
             value="draft"
-            variant={draft ? "primary" : "secondary"}
+            variant="secondary"
             disabled={busy}
           >
             {draft ? "Lưu thay đổi" : "Lưu nháp"}

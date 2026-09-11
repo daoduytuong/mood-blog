@@ -10,6 +10,7 @@ import {
   slugExists,
   updatePost,
   deletePost,
+  publishPost,
 } from "@/lib/db/posts";
 import { slugify } from "./slug";
 import { gocDocSchema } from "./schema";
@@ -445,6 +446,61 @@ export async function updateDraft(
 
   // Nháp không nằm trên trang công khai nào -> không revalidate.
   return { error: null, ok: true };
+}
+
+/**
+ * Đăng một nháp: lưu thay đổi đang có trên form TRƯỚC (nếu không, chữ vừa sửa
+ * mà chưa bấm "Lưu thay đổi" sẽ mất), rồi sinh slug thật và bật is_published.
+ */
+export async function publishDraft(
+  prev: ComposeState,
+  formData: FormData,
+): Promise<ComposeState> {
+  const saved = await updateDraft(prev, formData);
+  if (saved.error) return saved; // lưu hụt -> KHÔNG đăng
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Bạn cần đăng nhập đã nhé." };
+
+  const id = String(formData.get("id") ?? "");
+  const existing = await getByIdForAuthor(supabase, id); // đọc lại: đã có chữ mới
+  if (!existing || existing.authorId !== user.id)
+    return { error: "Không tìm thấy bài." };
+  if (existing.isPublished) return { error: "Bài này đã đăng rồi." };
+
+  // Đăng thì mới bắt buộc có nội dung (nháp được phép còn thiếu).
+  if (existing.type === "goc_doc") {
+    if (!existing.linkUrl && !existing.excerpt)
+      return { error: "Thêm một link hoặc đoạn trích nhé." };
+  } else if (existing.media.length === 0) {
+    return { error: "Thêm ít nhất một tấm ảnh trước khi đăng nhé." };
+  }
+
+  // Slug thật — cùng quy tắc với luồng tạo: Góc đọc lấy trích trước, còn lại caption.
+  const hint =
+    existing.type === "goc_doc"
+      ? existing.excerpt || existing.caption || ""
+      : existing.caption || "";
+  const prefix =
+    existing.type === "goc_doc"
+      ? "goc-doc"
+      : existing.type === "hanh_trinh"
+        ? "hanh-trinh"
+        : "khoanh-khac";
+  const slug = await uniqueSlug(supabase, hint, prefix);
+
+  try {
+    await publishPost(supabase, existing.id, slug);
+  } catch {
+    return { error: "Chưa đăng được, thử lại nhé." };
+  }
+
+  revalidatePath("/"); // ISR: bài mới phải xuất hiện ở Feed NGAY
+  revalidatePath(`/m/${slug}`);
+  redirect(`/m/${slug}`);
 }
 
 // Khoảnh khắc ẢNH (1..N) — ảnh đã được client upload lên Storage; action chỉ insert post.
