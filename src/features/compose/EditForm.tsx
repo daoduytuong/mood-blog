@@ -2,7 +2,12 @@
 
 import { useActionState, useState, useTransition } from "react";
 import { updatePostAction, type ComposeState } from "./actions";
-import { MOODS, MOOD_CODES, type MoodCode } from "@/lib/moods";
+import { MOOD_CODES, type MoodCode } from "@/lib/moods";
+import { Button } from "@/components/ui/Button";
+import { MoodChip } from "@/components/ui/Chip";
+import { FormError } from "@/components/ui/Field";
+import { Input } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Textarea";
 
 const initial: ComposeState = { error: null };
 
@@ -57,26 +62,25 @@ export function EditForm({
     <form onSubmit={onSubmit} className="flex flex-col gap-6">
       {!isMoment && (
         <div className="flex flex-col gap-4">
-          <input
+          <Input
             type="url"
             name="linkUrl"
             defaultValue={initialLinkUrl}
             placeholder="Dán link (tuỳ chọn)"
-            className="rounded-md border border-border bg-surface px-3 py-2 text-text outline-none focus:border-accent"
           />
-          <textarea
+          <Textarea
             name="excerpt"
             rows={3}
             defaultValue={initialExcerpt}
             placeholder="Một đoạn bạn tâm đắc…"
-            className="resize-none rounded-md border border-border bg-surface px-3 py-2 italic text-text outline-none focus:border-accent"
+            className="italic"
             style={{ fontFamily: "var(--font-serif)" }}
           />
         </div>
       )}
 
       {/* Caption / cảm nhận */}
-      <textarea
+      <Textarea
         name="caption"
         rows={3}
         defaultValue={initialCaption}
@@ -87,7 +91,6 @@ export function EditForm({
               ? "Hành trình này là gì? (vd: Tập gym)"
               : "Hôm nay bạn thấy thế nào?"
         }
-        className="resize-none rounded-md border border-border bg-surface px-3 py-2 text-text outline-none focus:border-accent"
         style={{ fontFamily: "var(--font-serif)" }}
       />
 
@@ -95,45 +98,23 @@ export function EditForm({
       <div>
         <p className="mb-2 text-sm text-text-muted">Tâm trạng</p>
         <div className="flex flex-wrap gap-2">
-          {MOOD_CODES.map((code) => {
-            const selected = mood === code;
-            return (
-              <button
-                key={code}
-                type="button"
-                onClick={() => setMood(code)}
-                aria-pressed={selected}
-                className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                  selected
-                    ? "border-accent text-text"
-                    : "border-border text-text-muted hover:text-text"
-                }`}
-              >
-                <span
-                  className="h-3 w-3 rounded-full"
-                  style={{ background: `var(${MOODS[code].tokenVar})` }}
-                />
-                {MOODS[code].label}
-              </button>
-            );
-          })}
+          {MOOD_CODES.map((code) => (
+            <MoodChip
+              key={code}
+              code={code}
+              selected={mood === code}
+              onClick={() => setMood(code)}
+            />
+          ))}
         </div>
       </div>
 
-      {error && (
-        <p className="text-sm text-text-muted" role="alert">
-          {error}
-        </p>
-      )}
+      {error && <FormError>{error}</FormError>}
 
       <div className="flex items-center gap-4">
-        <button
-          type="submit"
-          disabled={pending}
-          className="rounded-md bg-accent px-5 py-2 text-on-accent transition-opacity disabled:opacity-60"
-        >
-          {pending ? "Đang lưu…" : "Lưu thay đổi"}
-        </button>
+        <Button type="submit" loading={pending} loadingLabel="Đang lưu…">
+          Lưu thay đổi
+        </Button>
         <a
           href={`/m/${slug}`}
           className="text-sm text-text-muted hover:text-text"

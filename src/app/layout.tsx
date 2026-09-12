@@ -5,6 +5,7 @@ import Script from "next/script";
 import { AuthorNav } from "@/components/AuthorNav";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { env } from "@/env";
+import { SITE_DESCRIPTION, SITE_NAME, siteUrl } from "@/lib/site";
 import "./globals.css";
 
 const lobster = Lobster({
@@ -22,13 +23,24 @@ const beVietnam = Be_Vietnam_Pro({
 });
 
 export const metadata: Metadata = {
-  title: "khoảnh khắc của tôi",
-  description:
-    "Một khoảng lặng để ghi lại ảnh, nhạc và câu chuyện theo tâm trạng.",
+  metadataBase: new URL(siteUrl()),
+  title: SITE_NAME,
+  description: SITE_DESCRIPTION,
+  // Trình đọc RSS tự nhận ra kênh qua <link rel="alternate"> — cách theo dõi
+  // không cần tài khoản, không theo dõi người đọc.
+  alternates: {
+    types: { "application/rss+xml": [{ url: "/feed.xml", title: SITE_NAME }] },
+  },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#FAFAFA",
+  // Hai giá trị để thanh trình duyệt không kẹt màu sáng khi máy đang ở nền tối.
+  // Giới hạn đã biết: đây là `prefers-color-scheme`, nên nếu người xem TỰ bấm
+  // ThemeToggle ngược với cài đặt máy thì thanh trình duyệt vẫn theo máy.
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#FAFAFA" },
+    { media: "(prefers-color-scheme: dark)", color: "#0E0E0E" },
+  ],
 };
 
 export default function RootLayout({

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { buttonClass } from "@/components/ui/Button";
 
 export const metadata: Metadata = {
   title: "Trang này không còn ở đây",
@@ -12,10 +13,7 @@ export default function NotFound() {
       <p className="font-serif text-lg text-text">
         Trang này không còn ở đây nữa.
       </p>
-      <Link
-        href="/"
-        className="rounded-md border border-border px-4 py-2 text-sm text-text-muted transition-colors hover:text-text"
-      >
+      <Link href="/" className={buttonClass("quiet", "sm")}>
         ← Về Feed
       </Link>
     </main>

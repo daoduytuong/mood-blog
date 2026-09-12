@@ -82,6 +82,8 @@ export interface NewPost {
   excerpt?: string | null;
   linkUrl?: string | null;
   media?: MediaItem[];
+  /** Bỏ trống = đăng ngay (mặc định DB). `false` = lưu nháp. */
+  isPublished?: boolean;
 }
 
 /** Feed công khai: mới nhất trước, tie-break ổn định theo id. Defensive: lỗi -> []. */
@@ -102,11 +104,16 @@ export interface FeedCursor {
   id: string;
 }
 
-/** Một trang Feed: bài cũ hơn `cursor` (keyset theo created_at,id). Defensive: lỗi -> []. */
+/**
+ * Một trang Feed: bài cũ hơn `cursor` (keyset theo created_at,id). Defensive: lỗi -> [].
+ * `mood` (tuỳ chọn) lọc theo tâm trạng — đi đúng index `idx_posts_mood
+ * (mood, created_at desc) where is_published` nên không cần migration.
+ */
 export async function listPublishedPage(
   sb: DB,
   limit: number,
   cursor?: FeedCursor,
+  mood?: MoodCode,
 ): Promise<Post[]> {
   let q = sb
     .from("posts")
@@ -115,6 +122,7 @@ export async function listPublishedPage(
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(limit);
+  if (mood) q = q.eq("mood", mood);
   if (cursor) {
     // (created_at, id) < (cursor.createdAt, cursor.id)
     q = q.or(
@@ -154,6 +162,82 @@ export async function getBySlug(sb: DB, slug: string): Promise<Post | null> {
   return post;
 }
 
+/**
+ * Slug này đã có ai chiếm chưa — KHÔNG lọc `is_published`.
+ *
+ * `getBySlug` lọc `is_published = true` nên không thấy nháp; dùng nó để kiểm
+ * trùng slug sẽ sinh ra slug đã bị một nháp chiếm. Giới hạn đã biết: chạy bằng
+ * client của tác giả nên RLS chỉ cho thấy nháp CỦA CHÍNH tác giả — blog một
+ * người nên không sao, và ràng buộc `slug unique` ở DB vẫn là chốt cuối.
+ */
+export async function slugExists(sb: DB, slug: string): Promise<boolean> {
+  const { data, error } = await sb
+    .from("posts")
+    .select("id")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (error) return false; // lỗi -> coi như trống; unique constraint chặn nốt
+  return !!data;
+}
+
+/** Một bài của Tác giả kể cả NHÁP (RLS posts_author_all lo quyền). */
+export async function getByIdForAuthor(
+  sb: DB,
+  id: string,
+): Promise<Post | null> {
+  const { data, error } = await sb
+    .from("posts")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (error || !data) return null;
+  return toPost(data);
+}
+
+/**
+ * Đăng một nháp: đổi slug + bật is_published.
+ * Hàm DUY NHẤT được sửa hai cột này — cố ý không nhồi vào `updatePost` để
+ * trong codebase không tồn tại đường nào đổi slug của bài ĐÃ đăng.
+ * Tự chốt bằng `.eq("is_published", false)`: dù caller quên kiểm trước, hàm
+ * không bao giờ đổi slug một bài ĐÃ đăng (vỡ OG/sitemap/link đã chia sẻ).
+ */
+export async function publishPost(
+  sb: DB,
+  id: string,
+  slug: string,
+): Promise<void> {
+  const { error } = await sb
+    .from("posts")
+    .update({ slug, is_published: true })
+    .eq("id", id)
+    .eq("is_published", false);
+  if (error) throw error;
+}
+
+/** Dấu mốc tối giản của một bài — chỉ đủ vẽ lịch cảm xúc. */
+export interface PostMoodStamp {
+  createdAt: string;
+  mood: MoodCode;
+  slug: string;
+}
+
+/**
+ * Mốc (ngày, tâm trạng, slug) của MỌI bài đã publish — cho `/lich`.
+ * Chỉ 3 cột: KHÔNG kéo `media`/`caption` (một bài đa ảnh có blurDataURL nặng gấp
+ * nhiều lần cả trang lịch). Cũ nhất... để feature tự nhóm theo ngày giờ VN.
+ */
+export async function listMoodStamps(sb: DB): Promise<PostMoodStamp[]> {
+  const { data, error } = await sb
+    .from("posts")
+    .select("created_at, mood, slug")
+    .eq("is_published", true)
+    .order("created_at", { ascending: false });
+  if (error || !data) return [];
+  return (data as { created_at: string; mood: MoodCode; slug: string }[]).map(
+    (r) => ({ createdAt: r.created_at, mood: r.mood, slug: r.slug }),
+  );
+}
+
 /** Mọi slug đã publish (cho generateStaticParams). */
 export async function listSlugs(sb: DB): Promise<string[]> {
   const { data, error } = await sb
@@ -186,6 +270,7 @@ export async function createPost(sb: DB, input: NewPost): Promise<Post> {
       excerpt: input.excerpt ?? null,
       link_url: input.linkUrl ?? null,
       media: input.media ?? [],
+      is_published: input.isPublished ?? true,
     })
     .select("*")
     .single();

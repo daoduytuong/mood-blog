@@ -12,6 +12,11 @@ import {
 import { formatPostDate } from "@/lib/date";
 import { MOODS, MOOD_CODES, moodColor, type MoodCode } from "@/lib/moods";
 import { commentSchema, replyBodySchema } from "./schema";
+import { Button } from "@/components/ui/Button";
+import { MoodChip } from "@/components/ui/Chip";
+import { FormError } from "@/components/ui/Field";
+import { Input } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Textarea";
 import {
   getAnonId,
   getCommenterName,
@@ -245,36 +250,30 @@ export function CommentSection({
               {replyTo === c.id ? (
                 <div className="ml-4 mt-3 flex flex-col gap-2">
                   {!isAuthor && (
-                    <input
+                    <Input
                       type="text"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       maxLength={40}
                       placeholder="Tên của bạn"
-                      className="rounded-md border border-border bg-surface px-3 py-2 text-sm text-text outline-none focus:border-accent"
+                      aria-label="Tên của bạn"
+                      className="text-sm"
                     />
                   )}
-                  <textarea
+                  <Textarea
                     value={replyBody}
                     onChange={(e) => setReplyBody(e.target.value)}
                     rows={2}
                     maxLength={500}
                     placeholder={isAuthor ? "Trả lời với tư cách chủ nhà…" : "Trả lời…"}
-                    className="resize-none rounded-md border border-border bg-surface px-3 py-2 font-serif text-text outline-none focus:border-accent"
+                    aria-label="Nội dung trả lời"
+                    className="font-serif"
                   />
-                  {replyError && (
-                    <p className="text-xs text-text-muted" role="alert">
-                      {replyError}
-                    </p>
-                  )}
+                  {replyError && <FormError>{replyError}</FormError>}
                   <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => submitReply(c.id)}
-                      className="rounded-md bg-accent px-3 py-1.5 text-sm text-on-accent"
-                    >
+                    <Button type="button" size="sm" onClick={() => submitReply(c.id)}>
                       Gửi trả lời
-                    </button>
+                    </Button>
                     <button
                       type="button"
                       onClick={() => {
@@ -296,7 +295,7 @@ export function CommentSection({
                     setReplyBody("");
                     setReplyError(null);
                   }}
-                  className="ml-4 mt-2 text-xs text-accent hover:underline"
+                  className="ml-4 mt-2 text-xs text-accent-text hover:underline"
                 >
                   Trả lời
                 </button>
@@ -319,21 +318,22 @@ export function CommentSection({
           onChange={(e) => setHp(e.target.value)}
           style={{ position: "absolute", left: "-9999px", width: 1, height: 1, opacity: 0 }}
         />
-        <input
+        <Input
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
           maxLength={40}
           placeholder="Tên của bạn"
-          className="rounded-md border border-border bg-surface px-3 py-2 text-text outline-none focus:border-accent"
+          aria-label="Tên của bạn"
         />
-        <textarea
+        <Textarea
           value={body}
           onChange={(e) => setBody(e.target.value)}
           rows={3}
           maxLength={500}
           placeholder="Đôi lời gửi tới…"
-          className="resize-none rounded-md border border-border bg-surface px-3 py-2 font-serif text-text outline-none focus:border-accent"
+          aria-label="Đôi lời gửi tới"
+          className="font-serif"
         />
 
         {/* Tâm trạng — TÙY CHỌN: "bài này khiến bạn thấy…" */}
@@ -341,43 +341,26 @@ export function CommentSection({
           <span className="mr-1 text-xs text-text-muted">
             Bài này khiến bạn thấy…
           </span>
-          {MOOD_CODES.map((code) => {
-            const selected = mood === code;
-            return (
-              <button
-                key={code}
-                type="button"
-                aria-pressed={selected}
-                onClick={() => setMood(selected ? null : code)}
-                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
-                  selected
-                    ? "border-accent text-text"
-                    : "border-border text-text-muted hover:text-text"
-                }`}
-              >
-                <span
-                  aria-hidden
-                  className="h-2.5 w-2.5 rounded-full"
-                  style={{ background: moodColor(code) }}
-                />
-                {MOODS[code].label}
-              </button>
-            );
-          })}
+          {MOOD_CODES.map((code) => (
+            <MoodChip
+              key={code}
+              code={code}
+              size="sm"
+              selected={mood === code}
+              onClick={() => setMood(mood === code ? null : code)}
+            />
+          ))}
         </div>
 
-        {error && (
-          <p className="text-sm text-text-muted" role="alert">
-            {error}
-          </p>
-        )}
-        <button
+        {error && <FormError>{error}</FormError>}
+        <Button
           type="submit"
-          disabled={pending}
-          className="self-start rounded-md bg-accent px-5 py-2 text-on-accent transition-opacity disabled:opacity-60"
+          className="self-start"
+          loading={pending}
+          loadingLabel="Đang gửi…"
         >
-          {pending ? "Đang gửi…" : "Gửi"}
-        </button>
+          Gửi
+        </Button>
       </form>
     </section>
   );
@@ -415,7 +398,7 @@ function CommentItem({
           {comment.authorName}
         </span>
         {isAuthorReply && (
-          <span className="rounded-full bg-accent/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-accent">
+          <span className="rounded-full bg-accent/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-accent-text">
             tác giả
           </span>
         )}

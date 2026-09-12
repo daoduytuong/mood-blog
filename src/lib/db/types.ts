@@ -11,6 +11,7 @@ export interface MediaItem {
   h?: number;
   blurhash?: string;
   blurDataURL?: string; // preview ~16px (data URL) cho blur-up next/image
+  alt?: string; // mô tả ảnh cho trình đọc màn hình (caption tả cảm xúc, alt tả ẢNH)
   // Khoảnh khắc-video: { provider:'vimeo', video_id, poster_url }
   provider?: "vimeo";
   video_id?: string;

@@ -78,7 +78,7 @@ export function JourneyEntryList({
               <button
                 type="button"
                 onClick={() => setEditingPath(entry.path)}
-                className="px-2 text-sm text-accent underline-offset-2 transition-colors hover:underline"
+                className="px-2 text-sm text-accent-text underline-offset-2 transition-colors hover:underline"
               >
                 Sửa
               </button>

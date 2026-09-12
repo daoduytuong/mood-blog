@@ -11,7 +11,7 @@ import { MoodAvatar } from "@/components/post/MoodAvatar";
 import { formatPostDate } from "@/lib/date";
 import { MOODS } from "@/lib/moods";
 import { PostAuthorActions } from "@/components/post/PostAuthorActions";
-import { POST_TYPE_LABEL, POST_TYPE_FALLBACK_TITLE } from "@/lib/post-type";
+import { POST_TYPE_LABEL, postTitle } from "@/lib/post-type";
 import { ShareButton } from "@/components/post/ShareButton";
 import { HeartButton } from "@/features/hearts/HeartButton";
 import { LikeCount } from "@/features/hearts/LikeCount";
@@ -37,8 +37,7 @@ export async function generateMetadata({
   const post = await getBySlug(createPublicClient(), slug);
   if (!post) return {};
 
-  const title =
-    post.caption || post.excerpt || POST_TYPE_FALLBACK_TITLE[post.type];
+  const title = postTitle(post);
   const description =
     (post.excerpt || post.caption || "").slice(0, 200) || undefined;
   const imgPath = post.media[0]?.path;
@@ -132,7 +131,7 @@ export default async function PostDetail({
                 <Lightbox
                   key={i}
                   src={mediaPublicUrl(m.path!)}
-                  alt={`${post.caption ?? "Một khoảnh khắc"} (ảnh ${i + 1})`}
+                  alt={m.alt || `${post.caption ?? "Một khoảnh khắc"} (ảnh ${i + 1})`}
                   sizes="(max-width: 600px) 100vw, 600px"
                   blurDataURL={m.blurDataURL}
                   ratio={sharedRatio}
@@ -144,7 +143,7 @@ export default async function PostDetail({
           ) : imageItems[0]?.path ? (
             <Lightbox
               src={mediaPublicUrl(imageItems[0].path)}
-              alt={post.caption ?? "Một khoảnh khắc"}
+              alt={imageItems[0].alt || (post.caption ?? "Một khoảnh khắc")}
               sizes="(max-width: 600px) 100vw, 600px"
               blurDataURL={imageItems[0].blurDataURL}
               ratio={ratioOf(imageItems[0])}
@@ -178,7 +177,7 @@ export default async function PostDetail({
                   </div>
                   <Lightbox
                     src={mediaPublicUrl(m.path!)}
-                    alt={`${post.caption ?? "Hành trình"} — chặng ${ordinal}`}
+                    alt={m.alt || `${post.caption ?? "Hành trình"} — chặng ${ordinal}`}
                     sizes="(max-width: 600px) 100vw, 600px"
                     blurDataURL={m.blurDataURL}
                     ratio={ratioOf(m)}
@@ -220,7 +219,7 @@ export default async function PostDetail({
                   href={post.linkUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-[11px] uppercase tracking-[0.16em] text-accent hover:underline"
+                  className="text-[11px] uppercase tracking-[0.16em] text-accent-text hover:underline"
                 >
                   nguồn ↗
                 </a>

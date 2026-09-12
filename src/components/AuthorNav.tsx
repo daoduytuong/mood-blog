@@ -23,7 +23,7 @@ export function AuthorNav() {
 
   return (
     <nav className="flex items-center gap-4 text-sm">
-      <Link href="/compose" className="text-accent">
+      <Link href="/compose" className="text-accent-text">
         Soạn bài
       </Link>
       <Link href="/me" className="text-text-muted hover:text-text">

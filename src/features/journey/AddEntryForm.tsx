@@ -4,8 +4,12 @@ import { useActionState, useEffect, useRef, useState, useTransition } from "reac
 import { addJourneyEntry, type ComposeState } from "@/features/compose/actions";
 import { resizeImage } from "@/features/compose/resize-image";
 import { createClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/Button";
+import { FormError } from "@/components/ui/Field";
+import { Input } from "@/components/ui/Input";
 
 const initial: ComposeState = { error: null };
+const MAX_ALT = 200; // khớp mức cắt ở compose/actions.ts (server vẫn là nơi chốt)
 
 // YYYY-MM-DD theo giờ máy người dùng (giờ VN).
 function localToday(): string {
@@ -69,11 +73,20 @@ export function AddEntryForm({ id, slug }: { id: string; slug: string }) {
       const note = (
         form.elements.namedItem("entryNote") as HTMLInputElement | null
       )?.value.trim() ?? "";
+      const alt = (
+        form.elements.namedItem("alt") as HTMLInputElement | null
+      )?.value.trim() ?? "";
       const fd = new FormData();
       fd.set("id", id);
       fd.set("slug", slug);
       fd.set("media", JSON.stringify([
-        { path, w: r.width, h: r.height, blurDataURL: r.blurDataURL },
+        {
+          path,
+          w: r.width,
+          h: r.height,
+          blurDataURL: r.blurDataURL,
+          alt: alt || undefined,
+        },
       ]));
       fd.set("note", note);
       fd.set("date", entryDate || localToday());
@@ -98,7 +111,7 @@ export function AddEntryForm({ id, slug }: { id: string; slug: string }) {
               setPicked(null);
             }}
             aria-label="Bỏ ảnh"
-            className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-surface/90 text-text shadow-soft transition-colors hover:text-accent"
+            className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-surface/90 text-text shadow-soft transition-colors hover:text-accent-text"
           >×</button>
         </div>
       ) : (
@@ -110,37 +123,40 @@ export function AddEntryForm({ id, slug }: { id: string; slug: string }) {
       )}
       <input ref={fileRef} type="file" accept="image/*" onChange={onPickFile} className="hidden" />
 
+      {picked && (
+        <Input
+          type="text"
+          name="alt"
+          maxLength={MAX_ALT}
+          aria-label="Mô tả ảnh của chặng"
+          placeholder="Trong ảnh có gì? (tuỳ chọn — cho trình đọc màn hình)"
+        />
+      )}
+
       <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
-        <input
+        <Input
           type="date"
           name="date"
           value={entryDate}
           onChange={(e) => setEntryDate(e.target.value)}
           suppressHydrationWarning
           aria-label="Ngày của chặng"
-          className="rounded-md border border-border bg-surface px-3 py-2 text-text outline-none focus:border-accent"
         />
-        <input
+        <Input
           type="text"
           name="entryNote"
           maxLength={500}
           placeholder="Ghi chú chặng này (tuỳ chọn)"
-          className="flex-1 rounded-md border border-border bg-surface px-3 py-2 text-text outline-none focus:border-accent"
+          className="flex-1"
         />
       </div>
 
-      {error && (
-        <p className="text-sm text-text-muted" role="alert">{error}</p>
-      )}
+      {error && <FormError>{error}</FormError>}
 
       <div className="flex items-center gap-4">
-        <button
-          type="submit"
-          disabled={busy}
-          className="rounded-md bg-accent px-5 py-2 text-on-accent transition-opacity disabled:opacity-60"
-        >
-          {busy ? "Đang lưu…" : "Thêm chặng"}
-        </button>
+        <Button type="submit" loading={busy} loadingLabel="Đang lưu…">
+          Thêm chặng
+        </Button>
         <a href={`/m/${slug}`} className="text-sm text-text-muted hover:text-text">
           Huỷ
         </a>

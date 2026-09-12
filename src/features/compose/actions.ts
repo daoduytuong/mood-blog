@@ -6,14 +6,17 @@ import { createClient } from "@/lib/supabase/server";
 import {
   createPost,
   getBySlug,
+  getByIdForAuthor,
+  slugExists,
   updatePost,
   deletePost,
+  publishPost,
 } from "@/lib/db/posts";
 import { slugify } from "./slug";
 import { gocDocSchema } from "./schema";
 import { fetchVimeoMeta } from "./vimeo";
 import { MOOD_CODES, type MoodCode } from "@/lib/moods";
-import type { MediaItem } from "@/lib/db/types";
+import type { MediaItem, PostType } from "@/lib/db/types";
 
 export interface ComposeState {
   error: string | null;
@@ -29,12 +32,13 @@ async function uniqueSlug(
 ): Promise<string> {
   const base = slugify(hint) || `${fallbackPrefix}-${Date.now().toString(36)}`;
   let slug = base;
-  for (let i = 2; await getBySlug(supabase, slug); i++) slug = `${base}-${i}`;
+  for (let i = 2; await slugExists(supabase, slug); i++) slug = `${base}-${i}`;
   return slug;
 }
 
 const MAX_IMAGES = 10;
 const MAX_JOURNEY_ENTRIES = 200; // hành trình dài hơi (vd gym ~2 năm, 2-3 chặng/tuần)
+const MAX_ALT = 200; // alt là một câu mô tả, không phải bài viết
 
 // Khử media ảnh từ client (chống tamper): path PHẢI thuộc namespace user; blurDataURL capped.
 function sanitizeImageMedia(raw: unknown, userId: string): MediaItem[] {
@@ -49,7 +53,10 @@ function sanitizeImageMedia(raw: unknown, userId: string): MediaItem[] {
     const b = r.blurDataURL;
     const blurDataURL =
       typeof b === "string" && b.startsWith("data:image/") && b.length < 4000 ? b : undefined;
-    out.push({ path: r.path, w, h, blurDataURL });
+    // Rỗng -> undefined (không lưu chuỗi rỗng): chỗ render fallback về caption.
+    const alt =
+      typeof r.alt === "string" ? r.alt.trim().slice(0, MAX_ALT) || undefined : undefined;
+    out.push({ path: r.path, w, h, blurDataURL, alt });
   }
   return out;
 }
@@ -219,7 +226,10 @@ export async function updateJourneyEntry(
     formData.get("date") || current.date,
   );
   const next = [...existing.media];
-  next[idx] = replacement ? { ...replacement, ...meta } : { ...current, ...meta };
+  // Đổi ảnh nhưng form sửa chặng KHÔNG có ô alt -> giữ alt cũ, đừng để nó rụng âm thầm.
+  next[idx] = replacement
+    ? { ...replacement, alt: replacement.alt ?? current.alt, ...meta }
+    : { ...current, ...meta };
 
   try {
     await updatePost(supabase, id, { media: next });
@@ -269,6 +279,228 @@ export async function removeJourneyEntry(formData: FormData): Promise<void> {
     revalidatePath(`/m/${slug}`);
   }
   redirect(`/m/${slug}/edit`);
+}
+
+// ===== NHÁP =====
+// Nháp = post is_published=false. RLS `posts_public_read using (is_published)`
+// đã khiến nó vô hình với mọi đường đọc công khai -> không cần migration.
+
+const DRAFT_TYPES: PostType[] = ["khoanh_khac", "goc_doc", "hanh_trinh"];
+
+/** Lưu nháp: bài chưa đăng, slug TẠM. Slug thật sinh lúc Đăng. */
+export async function saveDraft(
+  _prev: ComposeState,
+  formData: FormData,
+): Promise<ComposeState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Bạn cần đăng nhập đã nhé." };
+
+  const type = String(formData.get("type") ?? "") as PostType;
+  if (!DRAFT_TYPES.includes(type)) return { error: "Loại bài không hợp lệ." };
+
+  const mood = String(formData.get("mood") ?? "");
+  if (!MOOD_CODES.includes(mood as MoodCode))
+    return { error: "Chọn một tâm trạng giúp mình nhé." };
+
+  const caption = String(formData.get("caption") ?? "").trim();
+  const excerpt = String(formData.get("excerpt") ?? "").trim();
+  const linkUrl = String(formData.get("linkUrl") ?? "").trim();
+
+  // Góc đọc: ràng buộc DB `goc_doc_has_source` đòi có link HOẶC trích, kể cả
+  // khi còn là nháp -> chặn ở đây để không ăn lỗi insert khó hiểu.
+  if (type === "goc_doc" && !linkUrl && !excerpt)
+    return { error: "Thêm một link hoặc đoạn trích nhé." };
+
+  let media: MediaItem[] = [];
+  try {
+    media = sanitizeImageMedia(
+      JSON.parse(String(formData.get("media") ?? "[]")),
+      user.id,
+    );
+  } catch {
+    media = [];
+  }
+  if (media.length > MAX_IMAGES) media = media.slice(0, MAX_IMAGES);
+
+  // Hành trình: chặng đầu mang ngày + ghi chú (như createJourney).
+  if (type === "hanh_trinh" && media[0]) {
+    const meta = sanitizeEntryMeta(formData.get("note"), formData.get("date"));
+    media = [{ ...media[0], ...meta }];
+  }
+
+  // Hint RỖNG -> luôn ra dạng `nhap-<base36>`. Cố ý KHÔNG truyền caption: slug
+  // sẽ sinh lại lúc đăng, sinh theo caption ở đây chỉ tạo hai slug cho một bài.
+  const slug = await uniqueSlug(supabase, "", "nhap");
+  try {
+    await createPost(supabase, {
+      authorId: user.id,
+      type,
+      mood: mood as MoodCode,
+      slug,
+      caption: caption || null,
+      excerpt: excerpt || null,
+      linkUrl: linkUrl || null,
+      media,
+      isPublished: false,
+    });
+  } catch {
+    const paths = media.map((m) => m.path).filter((p): p is string => !!p);
+    if (paths.length) await supabase.storage.from("media").remove(paths);
+    return { error: "Chưa lưu được nháp, thử lại nhé." };
+  }
+
+  // KHÔNG revalidatePath: nháp không lên trang công khai nào, và /me là
+  // force-dynamic nên tự tươi.
+  redirect("/me");
+}
+
+/** Sửa nháp: chữ + tâm trạng + ảnh. Từ chối nếu bài đã đăng. */
+export async function updateDraft(
+  _prev: ComposeState,
+  formData: FormData,
+): Promise<ComposeState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Bạn cần đăng nhập đã nhé." };
+
+  const id = String(formData.get("id") ?? "");
+  if (!id) return { error: "Thiếu thông tin bài, thử lại nhé." };
+
+  const existing = await getByIdForAuthor(supabase, id);
+  if (!existing || existing.authorId !== user.id)
+    return { error: "Không tìm thấy bài." };
+  // Bất biến: bài ĐÃ đăng không đi qua đường nháp (kiểm ở SERVER, không chỉ ở UI).
+  if (existing.isPublished) return { error: "Bài này đã đăng rồi." };
+
+  const mood = String(formData.get("mood") ?? "");
+  if (!MOOD_CODES.includes(mood as MoodCode))
+    return { error: "Chọn một tâm trạng giúp mình nhé." };
+
+  const caption = String(formData.get("caption") ?? "").trim();
+  const patch: Parameters<typeof updatePost>[2] = {
+    mood: mood as MoodCode,
+    caption: caption || null,
+  };
+
+  if (existing.type === "goc_doc") {
+    const excerpt = String(formData.get("excerpt") ?? "").trim();
+    const linkUrl = String(formData.get("linkUrl") ?? "").trim();
+    if (!linkUrl && !excerpt)
+      return { error: "Thêm một link hoặc đoạn trích nhé." };
+    if (linkUrl) {
+      try {
+        new URL(linkUrl);
+      } catch {
+        return { error: "Link chưa hợp lệ, kiểm lại nhé." };
+      }
+    }
+    patch.excerpt = excerpt || null;
+    patch.linkUrl = linkUrl || null;
+  }
+
+  // Ảnh: client gửi mảng CUỐI CÙNG (ảnh cũ giữ nguyên path, ảnh mới đã upload).
+  // Không gửi field `media` -> giữ nguyên ảnh cũ (đường đi của Task 4).
+  const rawMedia = formData.get("media");
+  let removedPaths: string[] = [];
+  if (rawMedia !== null) {
+    let media: MediaItem[] = [];
+    try {
+      media = sanitizeImageMedia(JSON.parse(String(rawMedia)), user.id);
+    } catch {
+      return { error: "Danh sách ảnh không hợp lệ, thử lại nhé." };
+    }
+    if (media.length > MAX_IMAGES) media = media.slice(0, MAX_IMAGES);
+
+    // QUAN TRỌNG: `sanitizeImageMedia` chỉ giữ path/w/h/blurDataURL/alt — nó
+    // DROP `date` và `note` của chặng. Với Hành trình phải gắn lại từ form,
+    // không thì ngày/ghi chú của chặng rụng mỗi lần lưu nháp. Nháp Hành trình
+    // chỉ có MỘT chặng nên cắt về `media[0]` là đúng (xem mục Phạm vi).
+    if (existing.type === "hanh_trinh" && media[0]) {
+      const meta = sanitizeEntryMeta(formData.get("note"), formData.get("date"));
+      media = [{ ...media[0], ...meta }];
+    }
+
+    // Ảnh có trong bài cũ mà không còn trong mảng mới -> rác, dọn SAU khi lưu.
+    const keep = new Set(media.map((m) => m.path).filter(Boolean));
+    removedPaths = existing.media
+      .map((m) => m.path)
+      .filter((p): p is string => !!p && !keep.has(p));
+
+    patch.media = media;
+  }
+
+  try {
+    await updatePost(supabase, id, patch);
+  } catch {
+    return { error: "Chưa lưu được, thử lại nhé." };
+  }
+
+  // DB đã trỏ danh sách mới -> gỡ ảnh cũ (best-effort; hụt cũng không hỏng bài).
+  if (removedPaths.length)
+    await supabase.storage.from("media").remove(removedPaths);
+
+  // Nháp không nằm trên trang công khai nào -> không revalidate.
+  return { error: null, ok: true };
+}
+
+/**
+ * Đăng một nháp: lưu thay đổi đang có trên form TRƯỚC (nếu không, chữ vừa sửa
+ * mà chưa bấm "Lưu thay đổi" sẽ mất), rồi sinh slug thật và bật is_published.
+ */
+export async function publishDraft(
+  prev: ComposeState,
+  formData: FormData,
+): Promise<ComposeState> {
+  const saved = await updateDraft(prev, formData);
+  if (saved.error) return saved; // lưu hụt -> KHÔNG đăng
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Bạn cần đăng nhập đã nhé." };
+
+  const id = String(formData.get("id") ?? "");
+  const existing = await getByIdForAuthor(supabase, id); // đọc lại: đã có chữ mới
+  if (!existing || existing.authorId !== user.id)
+    return { error: "Không tìm thấy bài." };
+  if (existing.isPublished) return { error: "Bài này đã đăng rồi." };
+
+  // Đăng thì mới bắt buộc có nội dung (nháp được phép còn thiếu).
+  if (existing.type === "goc_doc") {
+    if (!existing.linkUrl && !existing.excerpt)
+      return { error: "Thêm một link hoặc đoạn trích nhé." };
+  } else if (existing.media.length === 0) {
+    return { error: "Thêm ít nhất một tấm ảnh trước khi đăng nhé." };
+  }
+
+  // Slug thật — cùng quy tắc với luồng tạo: Góc đọc lấy trích trước, còn lại caption.
+  const hint =
+    existing.type === "goc_doc"
+      ? existing.excerpt || existing.caption || ""
+      : existing.caption || "";
+  const prefix =
+    existing.type === "goc_doc"
+      ? "goc-doc"
+      : existing.type === "hanh_trinh"
+        ? "hanh-trinh"
+        : "khoanh-khac";
+  const slug = await uniqueSlug(supabase, hint, prefix);
+
+  try {
+    await publishPost(supabase, existing.id, slug);
+  } catch {
+    return { error: "Chưa đăng được, thử lại nhé." };
+  }
+
+  revalidatePath("/"); // ISR: bài mới phải xuất hiện ở Feed NGAY
+  revalidatePath(`/m/${slug}`);
+  redirect(`/m/${slug}`);
 }
 
 // Khoảnh khắc ẢNH (1..N) — ảnh đã được client upload lên Storage; action chỉ insert post.
@@ -475,6 +707,8 @@ export async function updatePostAction(
 }
 
 // Story 1.7 — xoá bài (hearts cascade theo FK -> tổng tim /me tự rụng).
+// Đọc theo ID, KHÔNG theo slug: `getBySlug` lọc `is_published = true` nên bản
+// cũ không xoá nổi NHÁP. Đọc theo id cũng bớt mong manh khi dọn Storage.
 export async function deletePostAction(formData: FormData): Promise<void> {
   const supabase = await createClient();
   const {
@@ -483,25 +717,32 @@ export async function deletePostAction(formData: FormData): Promise<void> {
   if (!user) redirect("/login");
 
   const id = String(formData.get("id") ?? "");
-  const slug = String(formData.get("slug") ?? "");
   if (!id) redirect("/");
 
+  const existing = await getByIdForAuthor(supabase, id);
+  if (!existing || existing.authorId !== user.id) redirect("/");
+
+  const wasPublished = existing.isPublished;
+  const slug = existing.slug;
+
   // Dọn ảnh ở Storage (best-effort) trước khi xoá hàng — tránh rác.
-  const existing = slug ? await getBySlug(supabase, slug) : null;
-  if (existing && existing.authorId === user.id) {
-    const paths = existing.media
-      .map((m) => m.path)
-      .filter((p): p is string => !!p);
-    if (paths.length) await supabase.storage.from("media").remove(paths);
-  }
+  const paths = existing.media
+    .map((m) => m.path)
+    .filter((p): p is string => !!p);
+  if (paths.length) await supabase.storage.from("media").remove(paths);
 
   try {
     await deletePost(supabase, id); // RLS đảm bảo chỉ author xoá được
   } catch {
-    redirect(`/m/${slug}`); // xoá hụt -> quay lại bài, không nuốt lỗi âm thầm
+    // Xoá hụt -> quay lại chỗ vừa đứng, không nuốt lỗi âm thầm.
+    redirect(wasPublished ? `/m/${slug}` : "/me");
   }
 
-  if (slug) revalidatePath(`/m/${slug}`);
-  revalidatePath("/");
-  redirect("/");
+  // Nháp chưa từng nằm trên trang công khai nào -> không cần revalidate.
+  if (wasPublished) {
+    revalidatePath(`/m/${slug}`);
+    revalidatePath("/");
+    redirect("/");
+  }
+  redirect("/me");
 }

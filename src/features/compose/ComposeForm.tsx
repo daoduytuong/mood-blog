@@ -12,11 +12,21 @@ import {
   createMomentVideo,
   createGocDoc,
   createJourney,
+  saveDraft,
+  updateDraft,
+  publishDraft,
   type ComposeState,
 } from "./actions";
 import { resizeImage } from "./resize-image";
-import { MOODS, MOOD_CODES, type MoodCode } from "@/lib/moods";
+import { MOOD_CODES, type MoodCode } from "@/lib/moods";
+import type { MediaItem, PostType as DbPostType } from "@/lib/db/types";
 import { createClient } from "@/lib/supabase/client";
+import { mediaPublicUrl } from "@/lib/storage";
+import { Button } from "@/components/ui/Button";
+import { MoodChip } from "@/components/ui/Chip";
+import { FormError } from "@/components/ui/Field";
+import { Input } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Textarea";
 
 const MAX_IMAGES = 10;
 
@@ -24,32 +34,117 @@ const initial: ComposeState = { error: null };
 type PostType = "khoanh_khac" | "goc_doc" | "hanh_trinh";
 type MomentKind = "image" | "video"; // Khoảnh khắc: ảnh hoặc video Vimeo
 
+export interface DraftInit {
+  id: string;
+  type: DbPostType;
+  mood: MoodCode;
+  caption: string;
+  excerpt: string;
+  linkUrl: string;
+  media: MediaItem[];
+  /** Hành trình: ngày + ghi chú của chặng đầu (nháp chỉ có một chặng). */
+  date?: string;
+  note?: string;
+}
+
 // YYYY-MM-DD theo giờ máy người dùng (giờ VN) — cho ô ngày của Hành trình.
 function localToday(): string {
   return new Date().toLocaleDateString("en-CA");
 }
 
-type Picked = { file: File; url: string };
+/**
+ * Một ô ảnh trong form. Hai dạng dùng CHUNG mọi thao tác (xoá, nhập alt, thứ tự):
+ * - "existing": đã nằm trên Storage (mở lại nháp) — có `path`, không có `File`.
+ * - "new": vừa chọn từ máy, chưa resize/upload — có `File` + blob URL.
+ */
+type Slot =
+  | { kind: "existing"; item: MediaItem; alt: string }
+  | { kind: "new"; file: File; url: string; alt: string };
 
-export function ComposeForm() {
-  const [type, setType] = useState<PostType>("khoanh_khac");
+/** Ảnh để xem trước: ảnh cũ lấy URL công khai, ảnh mới lấy blob URL. */
+function slotPreview(s: Slot): string {
+  return s.kind === "existing" ? mediaPublicUrl(s.item.path!) : s.url;
+}
+
+/** Khoá React ổn định cho từng ô. */
+function slotKey(s: Slot): string {
+  return s.kind === "existing" ? `e:${s.item.path}` : `n:${s.url}`;
+}
+
+const MAX_ALT = 200; // khớp mức cắt ở actions.ts (server vẫn là nơi chốt)
+
+/**
+ * Ô mô tả ảnh (alt) — một hàng mỗi ảnh: ảnh nhỏ + ô nhập RỘNG.
+ * Không nhét vào lưới 3 cột: ô nhập ~100px trên mobile thì không gõ nổi.
+ */
+function AltFields({
+  slots,
+  onChange,
+}: {
+  slots: Slot[];
+  onChange: (index: number, alt: string) => void;
+}) {
+  if (slots.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-xs text-text-muted">
+        Mô tả ảnh (tuỳ chọn) — cho người dùng trình đọc màn hình.
+      </p>
+      {slots.map((s, i) => (
+        <div key={slotKey(s)} className="flex items-center gap-2">
+          <span className="h-10 w-10 shrink-0 overflow-hidden rounded-md border border-border">
+            {/* eslint-disable-next-line @next/next/no-img-element -- preview (blob hoac URL Storage) */}
+            <img
+              src={slotPreview(s)}
+              alt=""
+              className="h-full w-full object-cover"
+            />
+          </span>
+          <Input
+            type="text"
+            value={s.alt}
+            maxLength={MAX_ALT}
+            onChange={(e) => onChange(i, e.target.value)}
+            aria-label={`Mô tả ảnh ${i + 1}`}
+            placeholder={
+              slots.length > 1 ? `Trong ảnh ${i + 1} có gì?` : "Trong ảnh có gì?"
+            }
+            className="flex-1"
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function ComposeForm({ draft }: { draft?: DraftInit } = {}) {
+  const [type, setType] = useState<PostType>(draft?.type ?? "khoanh_khac");
   const [momentKind, setMomentKind] = useState<MomentKind>("image");
   const [imagesState, imagesAction] = useActionState(createMomentImages, initial);
   const [videoState, videoAction] = useActionState(createMomentVideo, initial);
   const [gocDocState, gocDocAction] = useActionState(createGocDoc, initial);
   const [journeyState, journeyAction] = useActionState(createJourney, initial);
+  const [draftState, draftAction] = useActionState(saveDraft, initial);
+  const [updateState, updateAction] = useActionState(updateDraft, initial);
+  const [publishState, publishAction] = useActionState(publishDraft, initial);
   // Ngày local (VN); SSR có thể ra ngày UTC khác trong 00:00–07:00 -> suppressHydrationWarning ở input.
-  const [entryDate, setEntryDate] = useState(() => localToday());
+  const [entryDate, setEntryDate] = useState(() => draft?.date ?? localToday());
   const [pending, startTransition] = useTransition();
-  const [mood, setMood] = useState<MoodCode | "">("");
-  const [images, setImages] = useState<Picked[]>([]);
+  const [mood, setMood] = useState<MoodCode | "">(draft?.mood ?? "");
+  const [slots, setSlots] = useState<Slot[]>(() =>
+    (draft?.media ?? [])
+      .filter((m) => !!m.path)
+      .map((item) => ({ kind: "existing" as const, item, alt: item.alt ?? "" })),
+  );
+  const slotsRef = useRef<Slot[]>(slots);
   const [uploading, setUploading] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const imagesRef = useRef<Picked[]>([]);
 
-  // Giữ ref đồng bộ để cleanup effect đọc được bản mới nhất (tránh stale closure).
-  useEffect(() => { imagesRef.current = images; });
+  // Giữ ref đồng bộ để cleanup effect đọc bản mới nhất (tránh stale closure).
+  useEffect(() => {
+    slotsRef.current = slots;
+  });
 
   const busy = pending || uploading;
   const error =
@@ -57,24 +152,47 @@ export function ComposeForm() {
     imagesState.error ??
     videoState.error ??
     gocDocState.error ??
-    journeyState.error;
+    journeyState.error ??
+    draftState.error ??
+    updateState.error ??
+    publishState.error;
 
-  // Thu hồi tất cả blob URL khi unmount.
-  useEffect(() => () => { imagesRef.current.forEach((im) => URL.revokeObjectURL(im.url)); }, []);
+  // Thu hồi blob URL khi unmount — CHỈ ô "new" mới có blob.
+  useEffect(
+    () => () => {
+      slotsRef.current.forEach((s) => {
+        if (s.kind === "new") URL.revokeObjectURL(s.url);
+      });
+    },
+    [],
+  );
 
   function onPickFiles(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
-    setImages((prev) => {
+    setSlots((prev) => {
       const room = MAX_IMAGES - prev.length;
-      const add = files.slice(0, Math.max(0, room)).map((file) => ({ file, url: URL.createObjectURL(file) }));
+      const add = files.slice(0, Math.max(0, room)).map(
+        (file) =>
+          ({
+            kind: "new" as const,
+            file,
+            url: URL.createObjectURL(file),
+            alt: "",
+          }),
+      );
       return [...prev, ...add];
     });
     e.target.value = ""; // cho chọn lại cùng file
   }
 
+  function setAlt(i: number, alt: string) {
+    setSlots((prev) => prev.map((s, k) => (k === i ? { ...s, alt } : s)));
+  }
+
   function removeImage(i: number) {
-    setImages((prev) => {
-      URL.revokeObjectURL(prev[i].url);
+    setSlots((prev) => {
+      const s = prev[i];
+      if (s?.kind === "new") URL.revokeObjectURL(s.url);
       return prev.filter((_, k) => k !== i);
     });
   }
@@ -87,26 +205,51 @@ export function ComposeForm() {
     return el?.value.trim() ?? "";
   }
 
-  // Resize + upload các ảnh đã chọn lên Storage. Trả null nếu lỗi (đã setLocalError).
-  async function uploadPicked(
-    list: Picked[],
-  ): Promise<{ path: string; w: number; h: number; blurDataURL: string }[] | null> {
+  /**
+   * Dựng mảng media CUỐI CÙNG theo đúng thứ tự đang hiện trên form:
+   * ô "existing" đi qua nguyên vẹn (chỉ cập nhật alt), ô "new" mới resize+upload.
+   * Trả null nếu lỗi (đã setLocalError).
+   */
+  async function uploadSlots(list: Slot[]): Promise<MediaItem[] | null> {
+    if (list.length === 0) return [];
     setUploading(true);
     try {
       const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setLocalError("Bạn cần đăng nhập đã nhé."); return null; }
-      const media: { path: string; w: number; h: number; blurDataURL: string }[] = [];
-      for (const im of list) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        setLocalError("Bạn cần đăng nhập đã nhé.");
+        return null;
+      }
+      const media: MediaItem[] = [];
+      for (const s of list) {
+        if (s.kind === "existing") {
+          media.push({ ...s.item, alt: s.alt.trim() || undefined });
+          continue;
+        }
         let r;
-        try { r = await resizeImage(im.file); }
-        catch { setLocalError("Một tấm ảnh chưa xử lý được, thử ảnh khác nhé."); return null; }
+        try {
+          r = await resizeImage(s.file);
+        } catch {
+          setLocalError("Một tấm ảnh chưa xử lý được, thử ảnh khác nhé.");
+          return null;
+        }
         const path = `${user.id}/${crypto.randomUUID()}.webp`;
         const { error: upErr } = await supabase.storage
           .from("media")
           .upload(path, r.blob, { contentType: "image/webp", upsert: false });
-        if (upErr) { setLocalError("Chưa tải được ảnh lên, thử lại nhé."); return null; }
-        media.push({ path, w: r.width, h: r.height, blurDataURL: r.blurDataURL });
+        if (upErr) {
+          setLocalError("Chưa tải được ảnh lên, thử lại nhé.");
+          return null;
+        }
+        media.push({
+          path,
+          w: r.width,
+          h: r.height,
+          blurDataURL: r.blurDataURL,
+          alt: s.alt.trim() || undefined,
+        });
       }
       return media;
     } catch {
@@ -125,6 +268,62 @@ export function ComposeForm() {
 
     const caption = fieldValue(form, "caption");
 
+    // Nút nào vừa bấm: "Lưu nháp" hay "Đăng".
+    const submitter = (e.nativeEvent as SubmitEvent)
+      .submitter as HTMLButtonElement | null;
+
+    if (draft) {
+      const media = await uploadSlots(slots);
+      if (media === null) return;
+      // Upload xong -> ảnh ĐÃ nằm trên Storage, nên hạ mọi ô về "existing" NGAY
+      // (form không redirect, nó còn đó sau khi lưu). Lần "Lưu thay đổi" sau
+      // chúng đi qua nguyên vẹn: không resize+upload lại thành path mới rồi để
+      // server dọn path cũ — đốt quota Storage cho đúng bấy nhiêu bytes.
+      // Đúng cả khi lưu hụt: ảnh vẫn trên Storage, `keep` của server vẫn chứa
+      // path đó nên lần lưu lại `removedPaths` ra rỗng.
+      slots.forEach((s) => {
+        if (s.kind === "new") URL.revokeObjectURL(s.url);
+      });
+      setSlots(media.map((item) => ({ kind: "existing" as const, item, alt: item.alt ?? "" })));
+      const fd = new FormData();
+      fd.set("id", draft.id);
+      fd.set("mood", mood);
+      fd.set("caption", caption);
+      fd.set("media", JSON.stringify(media));
+      if (type === "goc_doc") {
+        fd.set("linkUrl", fieldValue(form, "linkUrl"));
+        fd.set("excerpt", fieldValue(form, "excerpt"));
+      }
+      if (type === "hanh_trinh") {
+        fd.set("note", fieldValue(form, "entryNote"));
+        fd.set("date", entryDate || localToday());
+      }
+      const act = submitter?.value === "draft" ? updateAction : publishAction;
+      startTransition(() => act(fd));
+      return;
+    }
+
+    if (submitter?.value === "draft") {
+      // Nháp: ảnh là TUỲ CHỌN (chưa có ảnh vẫn lưu được).
+      const media = await uploadSlots(slots);
+      if (media === null) return; // uploadSlots đã setLocalError
+      const fd = new FormData();
+      fd.set("type", type);
+      fd.set("mood", mood);
+      fd.set("caption", caption);
+      fd.set("media", JSON.stringify(media));
+      if (type === "goc_doc") {
+        fd.set("linkUrl", fieldValue(form, "linkUrl"));
+        fd.set("excerpt", fieldValue(form, "excerpt"));
+      }
+      if (type === "hanh_trinh") {
+        fd.set("note", fieldValue(form, "entryNote"));
+        fd.set("date", entryDate || localToday());
+      }
+      startTransition(() => draftAction(fd));
+      return;
+    }
+
     if (type === "khoanh_khac" && momentKind === "video") {
       const videoUrl = fieldValue(form, "videoUrl");
       if (!videoUrl) return setLocalError("Dán link video Vimeo nhé.");
@@ -134,8 +333,8 @@ export function ComposeForm() {
       fd.set("videoUrl", videoUrl);
       startTransition(() => videoAction(fd));
     } else if (type === "khoanh_khac") {
-      if (images.length === 0) return setLocalError("Thêm ít nhất một tấm ảnh nhé.");
-      const media = await uploadPicked(images);
+      if (slots.length === 0) return setLocalError("Thêm ít nhất một tấm ảnh nhé.");
+      const media = await uploadSlots(slots);
       if (!media) return;
       const fd = new FormData();
       fd.set("caption", caption);
@@ -143,11 +342,11 @@ export function ComposeForm() {
       fd.set("media", JSON.stringify(media));
       startTransition(() => imagesAction(fd));
     } else if (type === "hanh_trinh") {
-      if (images.length === 0)
+      if (slots.length === 0)
         return setLocalError("Thêm một tấm ảnh cho chặng đầu tiên nhé.");
-      if (images.length > 1)
+      if (slots.length > 1)
         return setLocalError("Hành trình mỗi chặng chỉ một ảnh — bỏ bớt nhé.");
-      const media = await uploadPicked(images);
+      const media = await uploadSlots(slots);
       if (!media) return;
       const fd = new FormData();
       fd.set("caption", caption);
@@ -173,72 +372,83 @@ export function ComposeForm() {
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-6">
       {/* Chọn loại bài */}
-      <div className="flex gap-1 self-start rounded-full border border-border p-1 text-sm">
-        {(
-          [
-            ["khoanh_khac", "Khoảnh khắc"],
-            ["goc_doc", "Góc đọc"],
-            ["hanh_trinh", "Hành trình"],
-          ] as const
-        ).map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            aria-pressed={type === value}
-            onClick={() => setType(value)}
-            className={`rounded-full px-3 py-1 transition-colors ${
-              type === value
-                ? "bg-accent text-on-accent"
-                : "text-text-muted hover:text-text"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      {!draft && (
+        <div className="flex gap-1 self-start rounded-full border border-border p-1 text-sm">
+          {(
+            [
+              ["khoanh_khac", "Khoảnh khắc"],
+              ["goc_doc", "Góc đọc"],
+              ["hanh_trinh", "Hành trình"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={type === value}
+              onClick={() => setType(value)}
+              className={`rounded-full px-3 py-1 transition-colors ${
+                type === value
+                  ? "bg-accent text-on-accent"
+                  : "text-text-muted hover:text-text"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {type === "khoanh_khac" ? (
         <div className="flex flex-col gap-4">
-          {/* Ảnh hay video */}
-          <div className="flex gap-1 self-start rounded-full border border-border p-1 text-xs">
-            {(
-              [
-                ["image", "Ảnh"],
-                ["video", "Video"],
-              ] as const
-            ).map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={momentKind === value}
-                onClick={() => setMomentKind(value)}
-                className={`rounded-full px-3 py-1 transition-colors ${
-                  momentKind === value
-                    ? "bg-accent text-on-accent"
-                    : "text-text-muted hover:text-text"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          {/* Ảnh hay video — nháp chỉ có ảnh, chọn Video ở đây không có tác dụng gì. */}
+          {!draft && (
+            <div className="flex gap-1 self-start rounded-full border border-border p-1 text-xs">
+              {(
+                [
+                  ["image", "Ảnh"],
+                  ["video", "Video"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={momentKind === value}
+                  onClick={() => setMomentKind(value)}
+                  className={`rounded-full px-3 py-1 transition-colors ${
+                    momentKind === value
+                      ? "bg-accent text-on-accent"
+                      : "text-text-muted hover:text-text"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
 
           {momentKind === "image" ? (
             <div className="flex flex-col gap-3">
               <div className="grid grid-cols-3 gap-2">
-                {images.map((im, i) => (
-                  <div key={im.url} className="relative aspect-square overflow-hidden rounded-md border border-border">
-                    {/* eslint-disable-next-line @next/next/no-img-element -- preview blob tạm */}
-                    <img src={im.url} alt="" className="h-full w-full object-cover" />
+                {slots.map((s, i) => (
+                  <div
+                    key={slotKey(s)}
+                    className="relative aspect-square overflow-hidden rounded-md border border-border"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element -- preview (blob hoac URL Storage) */}
+                    <img
+                      src={slotPreview(s)}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
                     <button
                       type="button"
                       onClick={() => removeImage(i)}
                       aria-label={`Bỏ ảnh ${i + 1}`}
-                      className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full bg-surface/90 text-text shadow-soft transition-colors hover:text-accent"
+                      className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full bg-surface/90 text-text shadow-soft transition-colors hover:text-accent-text"
                     >×</button>
                   </div>
                 ))}
-                {images.length < MAX_IMAGES && (
+                {slots.length < MAX_IMAGES && (
                   <button
                     type="button"
                     onClick={() => fileRef.current?.click()}
@@ -248,14 +458,14 @@ export function ComposeForm() {
               </div>
               <input ref={fileRef} type="file" accept="image/*" multiple onChange={onPickFiles} className="hidden" />
               <p className="text-xs text-text-muted">Tối đa {MAX_IMAGES} ảnh · vuốt để xem trong feed.</p>
+              <AltFields slots={slots} onChange={setAlt} />
             </div>
           ) : (
             <div className="flex flex-col gap-2">
-              <input
+              <Input
                 type="url"
                 name="videoUrl"
                 placeholder="Dán link Vimeo (vd vimeo.com/123456789)"
-                className="rounded-md border border-border bg-surface px-3 py-2 text-text outline-none focus:border-accent"
               />
               <p className="text-xs text-text-muted">
                 Chỉ hỗ trợ Vimeo. Video sẽ hiện ảnh tĩnh, chạm mới phát.
@@ -267,19 +477,26 @@ export function ComposeForm() {
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-3">
             <div className="grid grid-cols-3 gap-2">
-              {images.map((im, i) => (
-                <div key={im.url} className="relative aspect-square overflow-hidden rounded-md border border-border">
-                  {/* eslint-disable-next-line @next/next/no-img-element -- preview blob tạm */}
-                  <img src={im.url} alt="" className="h-full w-full object-cover" />
+              {slots.map((s, i) => (
+                <div
+                  key={slotKey(s)}
+                  className="relative aspect-square overflow-hidden rounded-md border border-border"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element -- preview (blob hoac URL Storage) */}
+                  <img
+                    src={slotPreview(s)}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
                   <button
                     type="button"
                     onClick={() => removeImage(i)}
                     aria-label={`Bỏ ảnh ${i + 1}`}
-                    className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full bg-surface/90 text-text shadow-soft transition-colors hover:text-accent"
+                    className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full bg-surface/90 text-text shadow-soft transition-colors hover:text-accent-text"
                   >×</button>
                 </div>
               ))}
-              {images.length < 1 && (
+              {slots.length < 1 && (
                 <button
                   type="button"
                   onClick={() => fileRef.current?.click()}
@@ -291,48 +508,51 @@ export function ComposeForm() {
             <p className="text-xs text-text-muted">
               Một ảnh cho chặng đầu tiên · các chặng sau thêm ngay trên trang bài.
             </p>
+            <AltFields slots={slots} onChange={setAlt} />
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
-            <input
+            <Input
               type="date"
               name="date"
               value={entryDate}
               onChange={(e) => setEntryDate(e.target.value)}
               suppressHydrationWarning
               aria-label="Ngày của chặng đầu tiên"
-              className="rounded-md border border-border bg-surface px-3 py-2 text-text outline-none focus:border-accent"
             />
-            <input
+            <Input
               type="text"
               name="entryNote"
               maxLength={500}
+              defaultValue={draft?.note ?? ""}
               placeholder="Ghi chú chặng này (tuỳ chọn)"
-              className="flex-1 rounded-md border border-border bg-surface px-3 py-2 text-text outline-none focus:border-accent"
+              className="flex-1"
             />
           </div>
         </div>
       ) : (
         <div className="flex flex-col gap-4">
-          <input
+          <Input
             type="url"
             name="linkUrl"
+            defaultValue={draft?.linkUrl ?? ""}
             placeholder="Dán link (tuỳ chọn)"
-            className="rounded-md border border-border bg-surface px-3 py-2 text-text outline-none focus:border-accent"
           />
-          <textarea
+          <Textarea
             name="excerpt"
             rows={3}
+            defaultValue={draft?.excerpt ?? ""}
             placeholder="Một đoạn bạn tâm đắc…"
-            className="resize-none rounded-md border border-border bg-surface px-3 py-2 italic text-text outline-none focus:border-accent"
+            className="italic"
             style={{ fontFamily: "var(--font-serif)" }}
           />
         </div>
       )}
 
       {/* Caption / cảm nhận */}
-      <textarea
+      <Textarea
         name="caption"
         rows={3}
+        defaultValue={draft?.caption ?? ""}
         placeholder={
           type === "khoanh_khac"
             ? "Hôm nay bạn thấy thế nào?"
@@ -340,7 +560,6 @@ export function ComposeForm() {
               ? "Hành trình này là gì? (vd: Tập gym)"
               : "Vì sao bạn thích điều này?"
         }
-        className="resize-none rounded-md border border-border bg-surface px-3 py-2 text-text outline-none focus:border-accent"
         style={{ fontFamily: "var(--font-serif)" }}
       />
 
@@ -348,44 +567,60 @@ export function ComposeForm() {
       <div>
         <p className="mb-2 text-sm text-text-muted">Tâm trạng</p>
         <div className="flex flex-wrap gap-2">
-          {MOOD_CODES.map((code) => {
-            const selected = mood === code;
-            return (
-              <button
-                key={code}
-                type="button"
-                onClick={() => setMood(code)}
-                aria-pressed={selected}
-                className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                  selected
-                    ? "border-accent text-text"
-                    : "border-border text-text-muted hover:text-text"
-                }`}
-              >
-                <span
-                  className="h-3 w-3 rounded-full"
-                  style={{ background: `var(${MOODS[code].tokenVar})` }}
-                />
-                {MOODS[code].label}
-              </button>
-            );
-          })}
+          {MOOD_CODES.map((code) => (
+            <MoodChip
+              key={code}
+              code={code}
+              selected={mood === code}
+              onClick={() => setMood(code)}
+            />
+          ))}
         </div>
       </div>
 
-      {error && (
-        <p className="text-sm text-text-muted" role="alert">
-          {error}
-        </p>
+      {error && <FormError>{error}</FormError>}
+      {/* "Lưu thay đổi" không chuyển trang (khác "Đăng") — không báo gì thì trang
+      trông y như chưa bấm, dễ khiến bấm lại. Chỉ một dòng chữ tĩnh, không toast. */}
+      {!error && updateState.ok && (
+        <p className="text-sm text-text-muted">Đã lưu.</p>
       )}
 
-      <button
-        type="submit"
-        disabled={busy}
-        className="self-start rounded-md bg-accent px-5 py-2 text-on-accent transition-opacity disabled:opacity-60"
-      >
-        {busy ? "Đang lưu…" : "Đăng"}
-      </button>
+      {/* Các nút hành động */}
+      {(() => {
+        const publishButton = (
+          <Button type="submit" value="publish" loading={busy} loadingLabel="Đang lưu…">
+            Đăng
+          </Button>
+        );
+        const saveButton = !(type === "khoanh_khac" && momentKind === "video") && (
+          <Button
+            type="submit"
+            value="draft"
+            variant="secondary"
+            disabled={busy}
+          >
+            {draft ? "Lưu thay đổi" : "Lưu nháp"}
+          </Button>
+        );
+        return (
+          <div className="flex items-center gap-3">
+            {draft ? (
+              <>
+                {/* Khi sửa nháp: Enter trong ô một-dòng submit vào nút đầu tiên.
+                Nút đầu phải là nút an toàn (lưu), chứ không phải đăng liền
+                rồi mất hành trang lùi. */}
+                {saveButton}
+                {publishButton}
+              </>
+            ) : (
+              <>
+                {publishButton}
+                {saveButton}
+              </>
+            )}
+          </div>
+        );
+      })()}
     </form>
   );
 }

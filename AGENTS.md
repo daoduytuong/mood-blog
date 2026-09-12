@@ -20,8 +20,15 @@ Mood Blog: web blog cảm xúc cá nhân (đăng "Khoảnh khắc" + "Góc đọ
 - Tính năng mới → `src/features/<tên>` (logic + component theo domain).
 - UI dùng chung → `src/components/ui` (primitive) | `src/components/post` (UI bài đăng).
 - Gọi Supabase → **CHỈ** qua `src/lib/db`. KHÔNG gọi `supabase.from()` rải rác trong component.
-- Map tâm trạng → **CHỈ** qua `src/lib/moods.ts`.
+- Map tâm trạng → **CHỈ** qua `src/lib/moods.ts` (nhãn, màu, `moodPath()`, `moodFromSlug()`).
 - Route App Router ở `src/app`. Định danh code/route **tiếng Anh**; nội dung hiển thị **tiếng Việt**.
+  (Ngoại lệ đã có: route công khai đặt tiếng Việt cho người đọc — `/tam-trang/[mood]`, `/lich`, `/gioi-thieu`.)
+- Nút/ô nhập/chip → **dùng primitive** `components/ui/{Button,Input,Textarea,Field,Chip}`,
+  KHÔNG viết lại chuỗi class. Kích cỡ/biến thể đi qua **prop**, không chồng qua
+  `className`: hai utility cùng thuộc tính (`py-2` vs `py-1.5`, `rounded-md` vs
+  `rounded-sm`) tranh nhau theo thứ tự file CSS sinh ra, không theo thứ tự trong JSX.
+- Màu accent: chữ/icon dùng `text-accent-text`, nền/viền dùng `accent`.
+  `#3897F0` chỉ đạt 3.06:1 trên nền linen → KHÔNG dùng làm màu chữ.
 
 ## Bất biến (KHÔNG được phá)
 - `src/lib/moods.ts` là **chân lý** mã→nhãn→màu. KHÔNG hardcode hex màu tâm trạng nơi khác (luôn qua token `@theme` — design system **"Nguyên bản"**: phong cách Instagram sơ khai, nền linen `#FAFAFA`, card trắng viền 1px `--color-border`, accent xanh `#3897F0`, tim đỏ `--color-like`, wordmark Lobster; có light + dark; token hiện hành ở `globals.css` — DESIGN.md trong `_bmad-output` mô tả hệ "Ấn bản" CŨ). Ngoại lệ DUY NHẤT được hardcode hex: icon/OG (`brand-icon.tsx`, `opengraph-image.tsx`) vì next/og không đọc CSS token.
@@ -37,7 +44,8 @@ Mood Blog: web blog cảm xúc cá nhân (đăng "Khoảnh khắc" + "Góc đọ
 Lint sạch · build pass · không lộ secret · không phá bất biến · cập nhật File List trong story.
 
 ## Tài liệu nguồn (single source of truth)
-- Token/typography/components: `../_bmad-output/planning-artifacts/ux-designs/ux-personal-2026-06-04/DESIGN.md`
-- Hành vi/flows/states: `.../EXPERIENCE.md`
+- Token/typography/primitive: `../_bmad-output/planning-artifacts/ux-designs/nguyen-ban-2026-09-08/DESIGN.md`
+  (chân lý runtime vẫn là `globals.css`; DESIGN.md của `ux-personal-2026-06-04` mô tả hệ "Ấn bản" ĐÃ CHẾT)
+- Hành vi/flows/states: `.../ux-personal-2026-06-04/EXPERIENCE.md`
 - Kiến trúc/quyết định: `../_bmad-output/planning-artifacts/architecture.md`
 - Stories: `../_bmad-output/implementation-artifacts/`
