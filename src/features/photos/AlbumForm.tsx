@@ -217,8 +217,13 @@ export function AlbumForm({ album }: { album: Album }) {
             return (
               <li
                 key={p.id}
-                draggable
-                onDragStart={() => setDragFrom(i)}
+                draggable={!busy}
+                onDragStart={(e) => {
+                  // Firefox không bắt đầu kéo nếu dataTransfer trống.
+                  e.dataTransfer.setData("text/plain", String(i));
+                  e.dataTransfer.effectAllowed = "move";
+                  setDragFrom(i);
+                }}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={() => {
                   if (dragFrom !== null) move(dragFrom, i);
@@ -248,14 +253,14 @@ export function AlbumForm({ album }: { album: Album }) {
                 {line && <p className="truncate text-[10px] text-text-muted">{line}</p>}
                 <div className="flex items-center justify-between text-[11px] text-text-muted">
                   <span className="flex gap-1">
-                    <button type="button" onClick={() => move(i, i - 1)} disabled={i === 0} aria-label={`Ảnh ${i + 1}: lên trước`} className="px-1 hover:text-text disabled:opacity-40">‹</button>
-                    <button type="button" onClick={() => move(i, i + 1)} disabled={i === photos.length - 1} aria-label={`Ảnh ${i + 1}: xuống sau`} className="px-1 hover:text-text disabled:opacity-40">›</button>
+                    <button type="button" onClick={() => move(i, i - 1)} disabled={busy || i === 0} aria-label={`Ảnh ${i + 1}: lên trước`} className="px-1 hover:text-text disabled:opacity-40">‹</button>
+                    <button type="button" onClick={() => move(i, i + 1)} disabled={busy || i === photos.length - 1} aria-label={`Ảnh ${i + 1}: xuống sau`} className="px-1 hover:text-text disabled:opacity-40">›</button>
                   </span>
                   <span className="flex gap-2">
-                    <button type="button" onClick={() => setCover(cover === p.id ? "" : p.id)} className="hover:text-text">
+                    <button type="button" onClick={() => setCover(cover === p.id ? "" : p.id)} disabled={busy} className="hover:text-text disabled:opacity-40">
                       {cover === p.id ? "bỏ bìa" : "làm bìa"}
                     </button>
-                    <button type="button" onClick={() => remove(p)} aria-label={`Bỏ ảnh ${i + 1}`} className="hover:text-error">×</button>
+                    <button type="button" onClick={() => remove(p)} disabled={busy} aria-label={`Bỏ ảnh ${i + 1}`} className="hover:text-error disabled:opacity-40">×</button>
                   </span>
                 </div>
               </li>
