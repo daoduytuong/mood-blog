@@ -6,6 +6,7 @@
     "dev": "next dev",
     "dev:local": "set \"NODE_TLS_REJECT_UNAUTHORIZED=0\" && next dev",
     "build": "next build",
+    "build:local": "set \"NODE_TLS_REJECT_UNAUTHORIZED=0\" && next build",
     "start": "next start",
     "lint": "eslint",
     "gen:types": "supabase gen types typescript --linked > src/lib/db/types.ts"
