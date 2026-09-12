@@ -115,8 +115,17 @@ create index idx_album_comments_album on album_comments (album_id, created_at);
 create index idx_album_comments_parent on album_comments (parent_id);
 alter table album_comments enable row level security;
 
+-- Chỉ đọc bình luận của album ĐÃ publish (nháp vô hình với mọi đường công khai);
+-- tác giả vẫn thấy bình luận trên nháp của mình.
 create policy album_comments_public_read on album_comments
-  for select using (is_hidden = false);
+  for select using (
+    is_hidden = false
+    and exists (
+      select 1 from albums a
+      where a.id = album_comments.album_id
+        and (a.is_published or a.author_id = auth.uid())
+    )
+  );
 
 -- Khách: user_id null, chỉ album đã publish, reply 2 tầng (parent phải là gốc cùng album).
 create policy album_comments_anon_insert on album_comments
