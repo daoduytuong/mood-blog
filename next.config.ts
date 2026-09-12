@@ -21,6 +21,10 @@ const nextConfig: NextConfig = {
     deviceSizes: [640, 828, 1200],
     imageSizes: [320, 600],
     formats: ["image/webp"],
+    // TTL ảnh tối ưu = max(max-age upstream, minimumCacheTTL). Mặc định Next 16 là
+    // 4h -> mỗi lần xem lại sau 4h là STALE, tính thêm 1 transform (5K/tháng cạn
+    // nhanh). Path ảnh là uuid, không ghi đè, nên giữ 31 ngày là an toàn.
+    minimumCacheTTL: 2678400,
   },
   experimental: {
     // Ảnh đã resize phía client (≤2048px webp) nên nhỏ; nâng limit cho an toàn (mặc định 1MB).

@@ -3,12 +3,16 @@ import { createPublicClient } from "@/lib/supabase/public";
 import { listPublished } from "@/lib/db/posts";
 import { siteUrl } from "@/lib/site";
 import { MOOD_CODES, moodPath } from "@/lib/moods";
+import { getAlbumSlugs } from "@/features/photos/queries";
 
 export const revalidate = 300;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = siteUrl();
-  const posts = await listPublished(createPublicClient());
+  const [posts, albumSlugs] = await Promise.all([
+    listPublished(createPublicClient()),
+    getAlbumSlugs(),
+  ]);
   // Chỉ liệt kê trang lọc của tâm trạng THẬT SỰ có bài — 6 URL rỗng trong
   // sitemap là 6 trang mỏng, không có lợi gì cho tìm kiếm.
   const moodsWithPosts = MOOD_CODES.filter((code) =>
@@ -18,6 +22,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   return [
     { url: base, changeFrequency: "daily", priority: 1 },
     { url: `${base}/gioi-thieu`, changeFrequency: "yearly", priority: 0.4 },
+    ...(albumSlugs.length > 0
+      ? [{ url: `${base}/anh`, changeFrequency: "weekly" as const, priority: 0.6 }]
+      : []),
+    ...albumSlugs.map((slug) => ({
+      url: `${base}/anh/${slug}`,
+      changeFrequency: "monthly" as const,
+      priority: 0.6,
+    })),
     ...(posts.length > 0
       ? [
           {

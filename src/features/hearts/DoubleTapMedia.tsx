@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useHeart } from "./useHeart";
 import { HeartIcon } from "@/components/ui/HeartIcon";
+import type { HeartTarget } from "./target";
 
 const DOUBLE_TAP_MS = 280;
 const OVERLAY_MS = 700;
@@ -13,20 +14,22 @@ const OVERLAY_MS = 700;
 // - Chạm 2 lần (double-tap): CHỈ THẢ tim (không bao giờ gỡ — semantics IG) + overlay tim.
 // Overlay: motion-safe dùng keyframe heartPop; motion-reduce hiện tĩnh rồi tự ẩn.
 export function DoubleTapMedia({
-  postId,
+  target,
+  id,
   href,
   onSingleTap,
   label,
   children,
 }: {
-  postId: string;
+  target: HeartTarget;
+  id: string;
   href?: string;
   onSingleTap?: () => void;
   label?: string;
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const { liked, toggle } = useHeart(postId);
+  const { liked, toggle } = useHeart(target, id);
 
   const lastTap = useRef(0);
   const navTimer = useRef<ReturnType<typeof setTimeout> | null>(null);

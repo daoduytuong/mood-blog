@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useHeart } from "./useHeart";
 import { hasLiked } from "./anon";
+import type { HeartTarget } from "./target";
 
 // Số tim công khai (view heart_counts) + optimistic theo trạng thái tim local.
 // serverCount đến từ ISR (stale tối đa 300s) nên có thể đã/chưa gồm tim của mình.
@@ -10,18 +11,20 @@ import { hasLiked } from "./anon";
 // effect — SSR/hydration render giữ nguyên serverCount nên không lệch hydration);
 // chỉ cộng/trừ khi liked ĐỔI so với baseline.
 export function LikeCount({
-  postId,
+  target,
+  id,
   serverCount,
 }: {
-  postId: string;
+  target: HeartTarget;
+  id: string;
   serverCount: number;
 }) {
-  const { liked } = useHeart(postId);
+  const { liked } = useHeart(target, id);
   const [baseline, setBaseline] = useState<boolean | null>(null);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- chốt baseline 1 lần khi mount (đọc localStorage, SSR không có)
-    setBaseline(hasLiked(postId));
-  }, [postId]);
+    setBaseline(hasLiked(target.storageKey, id));
+  }, [target.storageKey, id]);
 
   const delta =
     baseline === null ? 0 : (liked ? 1 : 0) - (baseline ? 1 : 0);

@@ -2,12 +2,21 @@
 
 import { useHeart } from "./useHeart";
 import { HeartIcon } from "@/components/ui/HeartIcon";
+import type { HeartTarget } from "./target";
 
 // Tim kiểu IG: chưa thả = outline mực, đã thả = fill đỏ (--color-like).
 // Một chạm để thả/gỡ; fade màu (không "bụp").
 // `label` (tuỳ chọn): mô tả bài để aria-label không trùng nhau giữa các thẻ Feed.
-export function HeartButton({ postId, label }: { postId: string; label?: string }) {
-  const { liked, toggle } = useHeart(postId);
+export function HeartButton({
+  target,
+  id,
+  label,
+}: {
+  target: HeartTarget;
+  id: string;
+  label?: string;
+}) {
+  const { liked, toggle } = useHeart(target, id);
   const what = label ? `: ${label}` : " cho bài này";
 
   return (

@@ -238,7 +238,14 @@ export function ComposeForm({ draft }: { draft?: DraftInit } = {}) {
         const path = `${user.id}/${crypto.randomUUID()}.webp`;
         const { error: upErr } = await supabase.storage
           .from("media")
-          .upload(path, r.blob, { contentType: "image/webp", upsert: false });
+          .upload(path, r.blob, {
+            contentType: "image/webp",
+            upsert: false,
+            // Path là uuid, không bao giờ ghi đè -> ảnh immutable, cache 1 năm.
+            // Vercel lấy max(max-age upstream, minimumCacheTTL) làm TTL ảnh tối ưu;
+            // mặc định Supabase 3600s khiến mỗi 4h xem lại tốn thêm 1 transform.
+            cacheControl: "31536000",
+          });
         if (upErr) {
           setLocalError("Chưa tải được ảnh lên, thử lại nhé.");
           return null;

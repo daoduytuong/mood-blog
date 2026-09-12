@@ -57,7 +57,7 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html:
-              "(function(){try{var t=localStorage.getItem('theme');if(t==='dark'||(!t&&matchMedia('(prefers-color-scheme:dark)').matches)){document.documentElement.classList.add('dark')}}catch(e){}})()",
+              "(function(){try{var t=localStorage.getItem('theme');if(t==='dark'||(!t&&matchMedia('(prefers-color-scheme:dark)').matches)){document.documentElement.classList.add('dark')}var v=localStorage.getItem('mb_photo_view');if(v==='editorial'){document.documentElement.setAttribute('data-view','editorial')}}catch(e){}})()",
           }}
         />
         {/* Header dính + kính mờ: luôn có lối về, không che nội dung. */}
@@ -66,6 +66,11 @@ export default function RootLayout({
             <Link href="/" className="font-display text-xl text-text">
               khoảnh khắc của tôi
             </Link>
+            <nav className="ml-4 mr-auto flex items-center gap-4 text-sm">
+              <Link href="/anh" className="text-text-muted transition-colors hover:text-text">
+                Ảnh
+              </Link>
+            </nav>
             <div className="flex items-center gap-3">
               <AuthorNav />
               <ThemeToggle />

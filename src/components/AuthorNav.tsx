@@ -26,6 +26,9 @@ export function AuthorNav() {
       <Link href="/compose" className="text-accent-text">
         Soạn bài
       </Link>
+      <Link href="/me/anh" className="text-text-muted hover:text-text">
+        Album
+      </Link>
       <Link href="/me" className="text-text-muted hover:text-text">
         Trang của tôi
       </Link>

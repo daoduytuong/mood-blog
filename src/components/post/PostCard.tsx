@@ -13,6 +13,7 @@ import { MoodAvatar } from "./MoodAvatar";
 import { HeartButton } from "@/features/hearts/HeartButton";
 import { LikeCount } from "@/features/hearts/LikeCount";
 import { DoubleTapMedia } from "@/features/hearts/DoubleTapMedia";
+import { POST_HEARTS } from "@/features/hearts/target";
 import { POST_TYPE_LABEL } from "@/lib/post-type";
 
 const FEED_IMG_SIZES = "(max-width: 600px) 100vw, 600px";
@@ -96,7 +97,8 @@ export function PostCard({
                 {imageItems.map((m, i) => (
                   <DoubleTapMedia
                     key={i}
-                    postId={post.id}
+                    target={POST_HEARTS}
+                    id={post.id}
                     href={href}
                     label={`Mở bài: ${linkText} (ảnh ${i + 1})`}
                   >
@@ -115,7 +117,8 @@ export function PostCard({
             </div>
           ) : imageItems[0]?.path ? (
             <DoubleTapMedia
-              postId={post.id}
+              target={POST_HEARTS}
+              id={post.id}
               href={href}
               label={`Mở bài: ${linkText}`}
             >
@@ -137,7 +140,8 @@ export function PostCard({
                 {journeySlides.map(({ m, ordinal }, idx) => (
                   <DoubleTapMedia
                     key={m.path}
-                    postId={post.id}
+                    target={POST_HEARTS}
+                    id={post.id}
                     href={href}
                     label={`Mở hành trình: ${linkText} (chặng ${ordinal})`}
                   >
@@ -156,7 +160,8 @@ export function PostCard({
             </div>
           ) : journeySlides[0]?.m.path ? (
             <DoubleTapMedia
-              postId={post.id}
+              target={POST_HEARTS}
+              id={post.id}
               href={href}
               label={`Mở hành trình: ${linkText} (chặng 1)`}
             >
@@ -202,7 +207,7 @@ export function PostCard({
         <div className="flex flex-col gap-1 p-3">
           <div className="pointer-events-none -ml-2.5 flex items-center">
             <span className="pointer-events-auto relative z-10 inline-flex">
-              <HeartButton postId={post.id} label={linkText} />
+              <HeartButton target={POST_HEARTS} id={post.id} label={linkText} />
             </span>
             <Link
               href={`/m/${post.slug}#comments`}
@@ -217,7 +222,7 @@ export function PostCard({
             </Link>
           </div>
 
-          <LikeCount postId={post.id} serverCount={post.heartCount} />
+          <LikeCount target={POST_HEARTS} id={post.id} serverCount={post.heartCount} />
 
           {(isMoment || isJourney) && post.caption && (
             <ExpandableText
