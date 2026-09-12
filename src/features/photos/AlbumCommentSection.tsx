@@ -24,6 +24,38 @@ import { FormError } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 
+function AlbumCommentItem({
+  c,
+  authorId,
+  canModerate,
+  onModerate,
+}: {
+  c: AlbumComment;
+  authorId: string;
+  canModerate: boolean;
+  onModerate: (id: string, action: "hide" | "delete") => void;
+}) {
+  const isAuthorReply = c.userId != null && c.userId === authorId;
+  return (
+    <div aria-busy={c.id.startsWith("temp-") || undefined} className={c.id.startsWith("temp-") ? "opacity-60" : ""}>
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <span className={`text-sm ${isAuthorReply ? "font-semibold" : "font-medium"} text-text`}>{c.authorName}</span>
+        {isAuthorReply && (
+          <span className="rounded-full bg-accent/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-accent-text">tác giả</span>
+        )}
+        <time dateTime={c.createdAt} className="text-xs text-text-muted">{formatPostDate(c.createdAt)}</time>
+      </div>
+      <p className="mt-1 whitespace-pre-wrap font-serif leading-relaxed text-text">{c.body}</p>
+      {canModerate && (
+        <div className="mt-1.5 flex items-center gap-3 text-xs text-text-muted">
+          <button type="button" onClick={() => onModerate(c.id, "hide")} className="hover:text-text">Ẩn</button>
+          <button type="button" onClick={() => onModerate(c.id, "delete")} className="underline-offset-2 hover:text-text hover:underline">Xoá</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AlbumCommentSection({
   albumId,
   authorId,
@@ -152,28 +184,6 @@ export function AlbumCommentSection({
     }
   }
 
-  const Item = ({ c }: { c: AlbumComment }) => {
-    const isAuthorReply = c.userId != null && c.userId === authorId;
-    return (
-      <div aria-busy={c.id.startsWith("temp-") || undefined} className={c.id.startsWith("temp-") ? "opacity-60" : ""}>
-        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          <span className={`text-sm ${isAuthorReply ? "font-semibold" : "font-medium"} text-text`}>{c.authorName}</span>
-          {isAuthorReply && (
-            <span className="rounded-full bg-accent/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-accent-text">tác giả</span>
-          )}
-          <time dateTime={c.createdAt} className="text-xs text-text-muted">{formatPostDate(c.createdAt)}</time>
-        </div>
-        <p className="mt-1 whitespace-pre-wrap font-serif leading-relaxed text-text">{c.body}</p>
-        {isAuthor && (
-          <div className="mt-1.5 flex items-center gap-3 text-xs text-text-muted">
-            <button type="button" onClick={() => moderate(c.id, "hide")} className="hover:text-text">Ẩn</button>
-            <button type="button" onClick={() => moderate(c.id, "delete")} className="underline-offset-2 hover:text-text hover:underline">Xoá</button>
-          </div>
-        )}
-      </div>
-    );
-  };
-
   return (
     <section id="comments" className="mt-10 scroll-mt-24 border-t border-border pt-6">
       <h2 className="mb-3 text-sm font-medium text-text-muted">
@@ -185,9 +195,11 @@ export function AlbumCommentSection({
         <ul className="flex flex-col gap-6">
           {roots.map((c) => (
             <li key={c.id}>
-              <Item c={c} />
+              <AlbumCommentItem c={c} authorId={authorId} canModerate={isAuthor} onModerate={moderate} />
               {repliesOf(c.id).map((r) => (
-                <div key={r.id} className="ml-4 mt-3 border-l-2 border-border pl-4"><Item c={r} /></div>
+                <div key={r.id} className="ml-4 mt-3 border-l-2 border-border pl-4">
+                  <AlbumCommentItem c={r} authorId={authorId} canModerate={isAuthor} onModerate={moderate} />
+                </div>
               ))}
               {replyTo === c.id ? (
                 <div className="ml-4 mt-3 flex flex-col gap-2">

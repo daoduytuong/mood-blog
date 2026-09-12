@@ -114,7 +114,7 @@ export async function publishAlbumAction(prev: AlbumState, formData: FormData): 
   redirect(`/anh/${slug}`);
 }
 
-/** Xoá album: dọn Storage (best-effort) rồi xoá row (photos/hearts/comments cascade). */
+/** Xoá album: xoá row trước (photos/hearts/comments cascade), dọn Storage sau (best-effort). */
 export async function deleteAlbumAction(formData: FormData): Promise<void> {
   const { supabase, user } = await requireUser();
   if (!user) redirect("/login");
@@ -122,13 +122,14 @@ export async function deleteAlbumAction(formData: FormData): Promise<void> {
   const existing = id ? await getAlbumByIdForAuthor(supabase, id) : null;
   if (!existing || existing.authorId !== user.id) redirect("/me/anh");
 
-  const paths = await listPhotoPaths(supabase, id);
-  if (paths.length) await supabase.storage.from("photos").remove(paths);
+  const paths = await listPhotoPaths(supabase, id); // đọc TRƯỚC khi xoá row (cascade sẽ xoá photos)
   try {
     await deleteAlbum(supabase, id);
   } catch {
     redirect(`/me/anh/${id}`);
   }
+  // DB đã gọn -> dọn Storage best-effort (hụt thì thành rác, không mất dữ liệu).
+  if (paths.length) await supabase.storage.from("photos").remove(paths);
   if (existing.isPublished) revalidateAlbum(existing.slug);
   redirect("/me/anh");
 }

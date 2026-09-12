@@ -20,7 +20,9 @@ create index idx_albums_public on albums (created_at desc) where is_published;
 -- ===== PHOTOS =====
 create table photos (
   id            uuid primary key default gen_random_uuid(),
-  album_id      uuid not null references albums(id) on delete cascade,
+  -- Tên ràng buộc TƯỜNG MINH: albums có HAI quan hệ tới photos (album_id O2M
+  -- và cover_photo_id M2O) nên PostgREST cần hint `photos!photos_album_id_fkey`.
+  album_id      uuid not null constraint photos_album_id_fkey references albums(id) on delete cascade,
   path          text not null,                      -- <user>/<uuid>.webp trong bucket photos
   w             int,
   h             int,

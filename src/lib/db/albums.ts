@@ -73,10 +73,11 @@ function toPhoto(r: PhotoRow): Photo {
   };
 }
 
-// Row có thể kèm embed photos + aggregate album_comments(count).
+// Row có thể kèm embed photos + aggregate album_comments(count) + photo_total(count).
 type AlbumRowEmbed = AlbumRow & {
   photos?: PhotoRow[];
   album_comments?: { count: number }[];
+  photo_total?: { count: number }[];
 };
 
 function toAlbum(r: AlbumRowEmbed): Album {
@@ -93,7 +94,7 @@ function toAlbum(r: AlbumRowEmbed): Album {
     isPublished: r.is_published,
     createdAt: r.created_at,
     photos,
-    photoCount: photos.length, // ghi đè bằng withCounts() ở danh sách
+    photoCount: r.photo_total?.[0]?.count ?? photos.length,
     heartCount: 0,
     commentCount: r.album_comments?.[0]?.count ?? 0,
   };
@@ -103,20 +104,24 @@ function toAlbum(r: AlbumRowEmbed): Album {
 const PREVIEW_N = 4;
 const PHOTO_COLS =
   "id, album_id, path, w, h, blur_data_url, alt, caption, position, camera, lens, focal_length, aperture, shutter, iso, taken_at, created_at";
-const LIST_COLS = `*, album_comments(count), photos(${PHOTO_COLS})`;
+// `photos!photos_album_id_fkey`: albums có hai quan hệ tới photos (album_id và
+// cover_photo_id) — không hint thì PostgREST trả PGRST201 và tầng db nuốt lỗi
+// thành [] (feature chết im lặng). Đếm ảnh qua embed thứ hai thay vì kéo một
+// hàng/ảnh (Supabase cắt 1000 hàng không báo).
+const LIST_COLS = `*, album_comments(count), photos!photos_album_id_fkey(${PHOTO_COLS}), photo_total:photos!photos_album_id_fkey(count)`;
 
 /**
- * Bổ sung heartCount (view album_heart_counts), photoCount (đếm thật, không phải
- * số ảnh preview) và ảnh bìa nếu cover_photo_id nằm ngoài PREVIEW_N ảnh đầu.
- * Ba query nhỏ, tách khỏi query chính: view/embed hỏng thì chỉ mất số, không mất danh sách.
+ * Bổ sung heartCount (view album_heart_counts) và ảnh bìa nếu cover_photo_id
+ * nằm ngoài PREVIEW_N ảnh đầu. photoCount đã lấy trực tiếp từ embed
+ * photo_total trong toAlbum(). Hai query nhỏ, tách khỏi query chính: view/embed
+ * hỏng thì chỉ mất số, không mất danh sách.
  */
 async function withCounts(sb: DB, albums: Album[]): Promise<Album[]> {
   if (albums.length === 0) return albums;
   const ids = albums.map((a) => a.id);
 
-  const [hearts, photoIds, covers] = await Promise.all([
+  const [hearts, covers] = await Promise.all([
     sb.from("album_heart_counts").select("album_id, heart_count").in("album_id", ids),
-    sb.from("photos").select("album_id").in("album_id", ids),
     (() => {
       const missing = albums
         .filter((a) => a.coverPhotoId && !a.photos.some((p) => p.id === a.coverPhotoId))
@@ -132,11 +137,6 @@ async function withCounts(sb: DB, albums: Album[]): Promise<Album[]> {
     for (const r of hearts.data as { album_id: string; heart_count: number }[])
       heartMap.set(r.album_id, r.heart_count);
 
-  const countMap = new Map<string, number>();
-  if (!photoIds.error && photoIds.data)
-    for (const r of photoIds.data as { album_id: string }[])
-      countMap.set(r.album_id, (countMap.get(r.album_id) ?? 0) + 1);
-
   const coverMap = new Map<string, Photo>();
   if (!covers.error && covers.data)
     for (const r of covers.data as PhotoRow[]) coverMap.set(r.id, toPhoto(r));
@@ -146,7 +146,6 @@ async function withCounts(sb: DB, albums: Album[]): Promise<Album[]> {
     return {
       ...a,
       heartCount: heartMap.get(a.id) ?? 0,
-      photoCount: countMap.get(a.id) ?? a.photos.length,
       photos: extraCover ? [extraCover, ...a.photos] : a.photos,
     };
   });
