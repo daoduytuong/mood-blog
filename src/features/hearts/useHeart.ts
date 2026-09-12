@@ -3,7 +3,7 @@
 import { useSyncExternalStore, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getAnonId, hasLiked, markLiked, unmarkLiked } from "./anon";
-import type { HeartTarget } from "./target";
+import { resolveHeartTarget, type HeartTargetKind } from "./target";
 
 // Store ngoài tối giản để useSyncExternalStore re-đọc localStorage khi có thay đổi.
 const listeners = new Set<() => void>();
@@ -18,7 +18,8 @@ function emit() {
 // Story 3.1 (thả) + 3.2 (gỡ): toggle tim ẩn danh cho MỘT target (bài hoặc album).
 // "Đã thả" suy từ localStorage; useSyncExternalStore lo SSR (server=false)
 // -> không hydration mismatch, không setState-trong-effect.
-export function useHeart(target: HeartTarget, id: string) {
+export function useHeart(kind: HeartTargetKind, id: string) {
+  const target = resolveHeartTarget(kind);
   const liked = useSyncExternalStore(
     subscribe,
     () => hasLiked(target.storageKey, id), // snapshot client

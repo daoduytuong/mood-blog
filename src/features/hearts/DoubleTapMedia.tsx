@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useHeart } from "./useHeart";
 import { HeartIcon } from "@/components/ui/HeartIcon";
-import type { HeartTarget } from "./target";
+import type { HeartTargetKind } from "./target";
 
 const DOUBLE_TAP_MS = 280;
 const OVERLAY_MS = 700;
@@ -21,7 +21,7 @@ export function DoubleTapMedia({
   label,
   children,
 }: {
-  target: HeartTarget;
+  target: HeartTargetKind;
   id: string;
   href?: string;
   onSingleTap?: () => void;
