@@ -73,10 +73,10 @@ function toPhoto(r: PhotoRow): Photo {
   };
 }
 
-// Row có thể kèm embed photos + aggregate album_comments(count) + photo_total(count).
+// Row có thể kèm embed photos + album_comments(id) (đếm bằng length) + photo_total(count).
 type AlbumRowEmbed = AlbumRow & {
   photos?: PhotoRow[];
-  album_comments?: { count: number }[];
+  album_comments?: { id: string }[];
   photo_total?: { count: number }[];
 };
 
@@ -96,7 +96,7 @@ function toAlbum(r: AlbumRowEmbed): Album {
     photos,
     photoCount: r.photo_total?.[0]?.count ?? photos.length,
     heartCount: 0,
-    commentCount: r.album_comments?.[0]?.count ?? 0,
+    commentCount: r.album_comments?.length ?? 0,
   };
 }
 
@@ -108,7 +108,10 @@ const PHOTO_COLS =
 // cover_photo_id) — không hint thì PostgREST trả PGRST201 và tầng db nuốt lỗi
 // thành [] (feature chết im lặng). Đếm ảnh qua embed thứ hai thay vì kéo một
 // hàng/ảnh (Supabase cắt 1000 hàng không báo).
-const LIST_COLS = `*, album_comments(count), photos!photos_album_id_fkey(${PHOTO_COLS}), photo_total:photos!photos_album_id_fkey(count)`;
+// `album_comments(id)` chứ KHÔNG `(count)`: aggregate embed đòi SELECT cấp BẢNG,
+// album_comments chỉ có grant cấp cột (giấu anon_id) -> 42501. photos có grant
+// cấp bảng nên `photo_total(count)` vẫn dùng được.
+const LIST_COLS = `*, album_comments(id), photos!photos_album_id_fkey(${PHOTO_COLS}), photo_total:photos!photos_album_id_fkey(count)`;
 
 /**
  * Bổ sung heartCount (view album_heart_counts) và ảnh bìa nếu cover_photo_id

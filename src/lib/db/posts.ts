@@ -22,9 +22,9 @@ export interface Post {
   heartCount: number; // tổng tim công khai (view heart_counts; 0 nếu query không kèm)
 }
 
-// Row có thể kèm aggregate `comments(count)` + embed view `heart_counts` từ PostgREST.
+// Row có thể kèm embed `comments(id)` (đếm bằng length) + embed view `heart_counts` từ PostgREST.
 type PostRowWithCount = PostRow & {
-  comments?: { count: number }[];
+  comments?: { id: string }[];
   heart_counts?: { heart_count: number }[];
 };
 
@@ -41,13 +41,17 @@ function toPost(r: PostRowWithCount): Post {
     slug: r.slug,
     isPublished: r.is_published,
     createdAt: r.created_at,
-    commentCount: r.comments?.[0]?.count ?? 0,
+    commentCount: r.comments?.length ?? 0,
     heartCount: r.heart_counts?.[0]?.heart_count ?? 0,
   };
 }
 
 // Cột công khai + đếm bình luận chưa ẩn (tôn trọng RLS) cho Feed & chi tiết.
-const FEED_COLS = "*, comments(count)";
+// `comments(id)` chứ KHÔNG `comments(count)`: aggregate embed của PostgREST đòi
+// SELECT cấp BẢNG trên comments, mà 0011 đã rút về grant cấp cột (giấu anon_id)
+// -> `(count)` trả 42501 và tầng db nuốt thành [] (feed trống). Đếm bằng length;
+// RLS comments_public_read đã lọc is_hidden nên length = số lời chưa ẩn.
+const FEED_COLS = "*, comments(id)";
 
 /**
  * Tổng tim công khai từ view heart_counts (migration 0010) — query RIÊNG rồi merge
