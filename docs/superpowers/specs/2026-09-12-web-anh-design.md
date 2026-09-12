@@ -201,6 +201,51 @@ KHÔNG dùng `?view=` — query param đẩy trang sang dynamic, đúng bài h�
 
 Nút chuyển đặt góc phải đầu trang, hai icon nhỏ, `aria-pressed`. Đổi bố cục không kèm animation.
 
+## Album hiện bên mood-blog
+
+Một dải "Ảnh mới" trên `/`: hàng ngang 3-4 bìa album mới nhất, đặt trên
+`FeedList`, kèm link "xem tất cả" sang `/anh`.
+
+### Vì sao KHÔNG đi qua `/feed.xml`
+
+Hai lý do, lý do đầu là chặn cứng:
+
+1. **Feed không chứa ảnh.** `/feed.xml` cố ý chỉ phát text thuần — không
+   `<enclosure>`, không `media:content`, không đường dẫn Storage (xem chú thích
+   trong `src/app/feed.xml/route.ts`: "không nhúng ảnh, giữ RSS nhẹ và không
+   hot-link Storage"). Trong feed không có ảnh để lấy.
+2. **Chung một database.** Sinh XML rồi parse ngược là đi vòng ra internet để
+   lấy thứ nằm cách đó một câu query — mất kiểu dữ liệu, mất `blurDataURL`,
+   thêm một đường gãy được.
+
+Dải này đọc thẳng bảng `albums` qua `public.ts`.
+
+### Vì sao là dải riêng, KHÔNG trộn vào feed
+
+Feed phân trang keyset trên `(created_at, id)` của bảng `posts`. Chèn nguồn thứ
+hai vào giữa dòng đó bắt con trỏ phải hiểu cả hai bảng — thiếu thì trang 2 nhảy
+cóc hoặc lặp bài; làm đúng thì cần một SQL view UNION.
+
+Thêm nữa, mọi card trong feed đều vẽ `MoodBar`, mà album cố ý không có `mood`.
+
+Dải riêng né cả hai: nó nằm NGOÀI `FeedList`, là một server component đọc một
+query riêng. `FeedList`, `loadMorePosts`, `getFreshFeed` và localStorage cache
+không đổi một dòng.
+
+### Chi tiết
+
+- `getRecentAlbums(limit = 4)` trong `src/lib/db/albums.ts` — chỉ album đã
+  publish, mới nhất trước, mỗi album lấy đúng ảnh bìa.
+- Render trong `src/app/page.tsx`, TRÊN `<FeedList>`, dưới `<MoodFilterChips>`.
+- Chưa có album nào thì KHÔNG render gì — không nhắc "chưa có ảnh" (cùng tinh
+  thần `DraftList`, `MemoriesSection`).
+- `/` vẫn `revalidate = 300`. Đăng album gọi thêm `revalidatePath("/")`.
+- Bìa dùng `sizes="120px"` → rơi vào biến thể 320 có sẵn. 4 ảnh, ~4 transform,
+  cache chung với lưới `/anh`.
+- Không animation; hover chỉ đổi viền.
+
+Chiều ngược lại (bài mood-blog hiện bên `/anh`) KHÔNG làm — `/anh` giữ thuần ảnh.
+
 ## Rendering và quota
 
 | Route | Chế độ |
@@ -208,12 +253,14 @@ Nút chuyển đặt góc phải đầu trang, hai icon nhỏ, `aria-pressed`. �
 | `/anh`, `/anh/[slug]` | `revalidate = 300`, public client (giữ static) |
 | `/me/anh/*` | `force-dynamic` |
 
-Mọi mutation: `revalidatePath("/anh")` + `revalidatePath("/anh/<slug>")`.
+Mọi mutation: `revalidatePath("/anh")` + `revalidatePath("/anh/<slug>")` +
+`revalidatePath("/")` (dải "Ảnh mới" nằm trên trang chủ).
 
 Phục vụ ảnh:
 
 | Nơi | Cách | Transform |
 |---|---|---|
+| Dải "Ảnh mới" trên `/` | `next/image` @320, 4 bìa | ~4, cache chung với lưới |
 | Lưới bìa | `next/image`, 1 ảnh/album | ~2/album |
 | Ảnh xem trước (editorial) | `next/image` @320 | ~3/album, chỉ khi bấm sang mode đó |
 | Trang album | `next/image` | ~60-90/album |
@@ -234,6 +281,11 @@ KHÔNG nới `deviceSizes` trong `next.config.ts` — giữ `[640, 828, 1200]`, 
 - **Tim theo từng ảnh** — chốt tim ở mức album.
 - **RSS cho ảnh** — `/feed.xml` là mẫu sẵn, thêm sau.
 - **Nhiều người đăng** — một tác giả, dùng nguyên auth model hiện tại.
+- **Trộn album vào feed `/` theo thời gian** — cần view UNION để keyset chạy
+  đúng, và phải gán mood cho album. Dải riêng đã đủ dẫn người đọc sang `/anh`.
+- **Import qua RSS** — `/feed.xml` không chứa ảnh, và hai khu chung một DB nên
+  không có gì để "import".
+- **Bài mood-blog hiện bên `/anh`** — `/anh` giữ thuần ảnh.
 
 ## Bất biến phải giữ
 
