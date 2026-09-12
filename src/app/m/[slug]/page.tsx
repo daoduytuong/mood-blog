@@ -15,6 +15,7 @@ import { POST_TYPE_LABEL, postTitle } from "@/lib/post-type";
 import { ShareButton } from "@/components/post/ShareButton";
 import { HeartButton } from "@/features/hearts/HeartButton";
 import { LikeCount } from "@/features/hearts/LikeCount";
+import { POST_HEARTS } from "@/features/hearts/target";
 import { Gallery } from "@/components/ui/Gallery";
 import { VideoEmbed } from "@/components/ui/VideoEmbed";
 import { CommentSection } from "@/features/comments/CommentSection";
@@ -229,13 +230,13 @@ export default async function PostDetail({
 
           <div className="flex flex-col gap-1 pt-2">
             <div className="-ml-2.5 flex items-center gap-1">
-              <HeartButton postId={post.id} />
+              <HeartButton target={POST_HEARTS} id={post.id} />
               <ShareButton
                 slug={post.slug}
                 title={post.caption ?? post.excerpt ?? undefined}
               />
             </div>
-            <LikeCount postId={post.id} serverCount={post.heartCount} />
+            <LikeCount target={POST_HEARTS} id={post.id} serverCount={post.heartCount} />
           </div>
 
           <PostAuthorActions postId={post.id} slug={post.slug} type={post.type} />

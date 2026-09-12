@@ -1,8 +1,8 @@
 // Story 1.10: danh tính ẩn danh nhẹ + ghi nhớ "đã thả tim" phía client.
 // anon_id là vanity-metric (client-asserted): xoá localStorage/đổi thiết bị -> id mới. Không PII.
-// Vì RLS chặn anon SELECT hearts, trạng thái "đã thả" CHỈ suy từ localStorage.
+// Vì RLS chặn anon SELECT bảng tim, trạng thái "đã thả" CHỈ suy từ localStorage.
+// `storageKey` do HeartTarget cung cấp: "mb_liked" cho bài, "mb_liked_album" cho album.
 const ANON_KEY = "mb_anon";
-const LIKED_KEY = "mb_liked";
 
 export function getAnonId(): string {
   if (typeof window === "undefined") return "";
@@ -18,35 +18,35 @@ export function getAnonId(): string {
   }
 }
 
-function getLikedSet(): Set<string> {
+function getLikedSet(storageKey: string): Set<string> {
   if (typeof window === "undefined") return new Set();
   try {
-    return new Set(JSON.parse(localStorage.getItem(LIKED_KEY) ?? "[]"));
+    return new Set(JSON.parse(localStorage.getItem(storageKey) ?? "[]"));
   } catch {
     return new Set();
   }
 }
 
-export function hasLiked(postId: string): boolean {
-  return getLikedSet().has(postId);
+export function hasLiked(storageKey: string, id: string): boolean {
+  return getLikedSet(storageKey).has(id);
 }
 
-function setLiked(postId: string, liked: boolean): void {
+function setLiked(storageKey: string, id: string, liked: boolean): void {
   if (typeof window === "undefined") return;
   try {
-    const s = getLikedSet();
-    if (liked) s.add(postId);
-    else s.delete(postId);
-    localStorage.setItem(LIKED_KEY, JSON.stringify([...s]));
+    const s = getLikedSet(storageKey);
+    if (liked) s.add(id);
+    else s.delete(id);
+    localStorage.setItem(storageKey, JSON.stringify([...s]));
   } catch {
     /* localStorage không khả dụng -> bỏ qua (chấp nhận) */
   }
 }
 
-export function markLiked(postId: string): void {
-  setLiked(postId, true);
+export function markLiked(storageKey: string, id: string): void {
+  setLiked(storageKey, id, true);
 }
 
-export function unmarkLiked(postId: string): void {
-  setLiked(postId, false);
+export function unmarkLiked(storageKey: string, id: string): void {
+  setLiked(storageKey, id, false);
 }
