@@ -18,5 +18,8 @@ Thuật ngữ thương hiệu giữ tiếng Việt ở UI; định danh code dù
 | Trang cá nhân/tổng tim | `/me` | Dashboard Tác giả (xem tổng tim) |
 | Đăng nhập | `/login` | Đăng nhập Tác giả |
 | Chi tiết bài | `/m/[slug]` | Trang xem một bài, có URL chia sẻ |
+| Album | `albums` (table) / `/anh/[slug]` | Bộ ảnh máy ảnh có EXIF, địa điểm; KHÔNG có tâm trạng |
+| Ảnh | `photos` (table) | Một ảnh trong album; EXIF tách cột (`camera`, `lens`, `focal_length`, `aperture`, `shutter`, `iso`, `taken_at`) |
+| Tim album / lời album | `album_hearts`, `album_comments`, view `album_heart_counts` | Bảng gương của tim/bình luận bài, cùng mô hình ẩn danh |
 
 6 tâm trạng: hoài niệm (`hoai_niem`) · bình yên (`binh_yen`) · vui (`vui`) · buồn (`buon`) · trầm tư (`tram_tu`) · cô đơn (`co_don`).
