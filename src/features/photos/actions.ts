@@ -236,7 +236,13 @@ export async function reorderPhotosAction(formData: FormData): Promise<AlbumStat
   const existing = albumId ? await getAlbumByIdForAuthor(supabase, albumId) : null;
   if (!existing || existing.authorId !== user.id) return { error: "Không tìm thấy album." };
   const have = new Set(existing.photos.map((p) => p.id));
-  if (ids.length !== have.size || !ids.every((id) => have.has(id)))
+  const unique = new Set(ids);
+  // Hoán vị THẬT: đủ số, không trùng, mọi id đều thuộc album.
+  if (
+    ids.length !== have.size ||
+    unique.size !== ids.length ||
+    !ids.every((id) => have.has(id))
+  )
     return { error: "Thứ tự không khớp ảnh trong album." };
   try {
     await reorderPhotos(supabase, albumId, ids);
