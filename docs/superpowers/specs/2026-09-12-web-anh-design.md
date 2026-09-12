@@ -1,7 +1,7 @@
 # Thiết kế: Web chia sẻ ảnh (khu `/anh`)
 
 Ngày: 2026-09-12
-Trạng thái: đã duyệt thiết kế, chờ lập kế hoạch
+Trạng thái: đã duyệt thiết kế, đã rà soát lần 2 (2026-09-12), chờ lập kế hoạch
 
 ## Mục tiêu
 
@@ -27,7 +27,7 @@ Ba rào, mỗi rào đủ chặn một mình:
 
 Cách lách bằng scrape JSON của shared album là API không chính thức, vi phạm ToS và gãy bất cứ lúc nào. Không dùng.
 
-Kết luận: ảnh nằm trên Supabase Storage, webp 2048px như `resize-image.ts` hiện có. Sức chứa ~300-500KB/ảnh, 1GB Free ≈ 2000-3000 ảnh ≈ 50-100 album.
+Kết luận: ảnh nằm trên Supabase Storage, webp 2048px như `resize-image.ts` hiện có. Ảnh máy ảnh nhiều chi tiết ở 2048px q0.8 thường 600KB-1MB (bucket `media` hiện có: p50 238KB nhưng trung bình 1.27MB). 1GB Free ≈ 1000-1500 ảnh ≈ 30-50 album — đủ cho vài năm, nhưng không phải "vô hạn".
 
 ## Kiến trúc
 
@@ -37,19 +37,21 @@ src/app/anh/
   [slug]/page.tsx          trang album           (revalidate 300 + generateStaticParams)
 src/app/me/anh/
   page.tsx                 danh sách album để sửa (force-dynamic)
-  moi/page.tsx             tạo album mới
-  [id]/page.tsx            sửa album
+  [id]/page.tsx            sửa album (form duy nhất; "tạo mới" = action tạo nháp rồi redirect vào đây)
 src/features/photos/
   queries.ts               đọc công khai (public client)
-  actions.ts               "use server" — tạo/sửa/xoá/đăng
+  actions.ts               "use server" — tạo nháp/sửa/xoá/đăng/đổi thứ tự
   AlbumForm.tsx            form đăng
   AlbumGrid.tsx            lưới bìa + chuyển mode
   ExifPanel.tsx            khối thông số ẩn/hiện
   exif.ts                  đọc EXIF phía client
 src/lib/db/
-  albums.ts                chokepoint supabase.from() cho album + ảnh
+  albums.ts                chokepoint supabase.from() cho album + ảnh (+ rpc reorder_photos)
   photo-hearts.ts          tim album
   photo-comments.ts        bình luận album
+src/features/hearts/       SỬA: useHeart/HeartButton/LikeCount/anon.ts nhận tham số
+                           { table: "hearts" | "album_hearts", idColumn, storageKey }
+                           thay vì gắn cứng bảng hearts + key mb_liked
 ```
 
 Tuân `AGENTS.md`: mọi `supabase.from()` nằm trong `src/lib/db/`, feature ở `src/features/<tên>/`, route công khai tiếng Việt (tiền lệ `/tam-trang`, `/lich`).
@@ -60,7 +62,9 @@ Khu ảnh KHÔNG dùng `mood` — đây là lý do chính tách bảng.
 
 Nav: thêm mục "Ảnh" vào header. Dùng chung wordmark/theme/toggle với mood-blog, không dựng layout thứ hai.
 
-Storage: bucket mới `photos`, tách khỏi `media` để policy và quota nhìn rõ ràng. Cần thêm `photoPublicUrl()` trong `src/lib/storage.ts` (song song `mediaPublicUrl`).
+Storage: bucket mới `photos`, tách khỏi `media` để policy và quota nhìn rõ ràng. Tạo bucket với `file_size_limit = 3145728` (3MB) và `allowed_mime_types = '{image/webp}'` ngay trong migration — chặn rác ở tầng Storage, không cần code. Cần thêm `photoPublicUrl()` trong `src/lib/storage.ts` (song song `mediaPublicUrl`).
+
+**Ảnh trên Storage là immutable.** Path là `<user>/<uuid>.webp`, upload `upsert: false`, không bao giờ ghi đè; đổi ảnh = path mới + xoá path cũ. Nhờ vậy upload đặt `cacheControl: "31536000"` (1 năm) và `next.config.ts` đặt `minimumCacheTTL = 31 ngày` mà không sợ ảnh cũ kẹt cache. (Hai thứ này đã áp cho mood-blog cùng ngày rà soát — xem *Rendering và quota*.)
 
 ## Schema
 
@@ -102,6 +106,14 @@ album_hearts   (album_id -> albums on delete cascade, anon_id, created_at,
 album_comments (id, album_id -> albums on delete cascade, parent_id, user_id,
                 anon_id, anon_ip, author_name, body, is_hidden, created_at)
 album_heart_counts  -- view aggregate, security_invoker = off
+
+-- RPC đổi thứ tự: MỘT câu UPDATE thay vì 30 round-trip; RLS photos lo quyền.
+create function reorder_photos(p_album_id uuid, p_ids uuid[]) returns void
+  language sql security invoker as $$
+  update photos p set position = o.ord
+  from unnest(p_ids) with ordinality as o(id, ord)
+  where p.id = o.id and p.album_id = p_album_id;
+$$;
 ```
 
 Xoá album thì tim và bình luận rụng theo FK cascade, đúng như `deletePostAction`
@@ -120,15 +132,25 @@ của mood-blog dựa vào. Ảnh trên Storage vẫn phải dọn tay trước 
 - `albums_public_read using (is_published)` — nháp vô hình với mọi đường công khai.
 - `albums_author_all` cho tác giả.
 - `photos` đọc theo album đã publish; ghi chỉ tác giả.
-- Tim: anon INSERT được, KHÔNG SELECT bảng tim. Tổng chỉ qua view `album_heart_counts` (`security_invoker = off`, chỉ đếm album đã publish) — đúng khuôn migration 0010. Danh tính người thả không bao giờ lộ.
-- `album_comments`: REVOKE `anon_id`/`anon_ip` khỏi SELECT (chống theo dõi khách xuyên album, đúng bài học migration 0007). Tầng db dùng danh sách cột tường minh; không bao giờ thêm hai cột đó vào select.
-- Tác giả chỉ UPDATE được `is_hidden` trên bình luận (kiểm duyệt, không giả mạo).
+- Tim: anon INSERT được, KHÔNG SELECT bảng tim. Tổng chỉ qua view `album_heart_counts` (`security_invoker = off`, chỉ đếm album đã publish) — đúng khuôn migration 0010. Danh tính người thả không bao giờ lộ. Thêm policy DELETE `using (true)` như `hearts_anon_delete` (0004) — không có thì `useHeart` gỡ tim lỗi im lặng.
+- `album_comments`: **KHÔNG dùng `revoke select (cột)`** — pattern của 0007 vô hiệu vì Supabase grant SELECT cấp bảng cho anon/authenticated, và Postgres bỏ qua revoke cấp cột khi grant cấp bảng còn (phát hiện khi rà soát, đã vá cho `comments` ở migration 0011). Cách đúng:
+  ```sql
+  revoke select on album_comments from anon, authenticated;
+  grant select (id, album_id, parent_id, user_id, author_name, body, is_hidden, created_at)
+    on album_comments to anon, authenticated;
+  ```
+  Grant cấp cột vẫn cho `count(*)` chạy nên embed đếm bình luận không gãy. Tầng db vẫn dùng danh sách cột tường minh (phòng thủ hai lớp).
+- Rate-limit: trigger `comments_rate_limit` hardcode `from comments`. Viết hàm mới `album_comments_rate_limit()` cùng logic (≤5/phút/IP, chỉ khách), gắn `before insert on album_comments`. Không sửa hàm cũ để khỏi chạm bảng đang chạy. `revoke execute` khỏi anon/authenticated như 0011.
+- Khách chỉ bình luận lên album ĐÃ publish (`exists (select 1 from albums a where a.id = album_id and a.is_published)`), `user_id is null`, reply 2 tầng như 0008.
+- Tác giả chỉ UPDATE được `is_hidden` trên bình luận (kiểm duyệt, không giả mạo): `revoke update on album_comments from authenticated; grant update (is_hidden) ...` — revoke cấp bảng rồi grant cấp cột là đúng chiều, pattern này 0007 làm đúng.
 
 ## EXIF
 
 ### Đọc
 
-`exifr` (~10KB gzip) ở client, chạy TRƯỚC `resizeImage()`. Thứ tự này bắt buộc: canvas re-encode xoá sạch metadata, đọc sau thì không còn gì.
+`exifr` bản **lite** (`exifr/dist/lite.esm.mjs`, 12KB gzip; bản full 22KB, mini 8KB nhưng chỉ trả key số) ở client, chạy TRƯỚC `resizeImage()`. Thứ tự này bắt buộc: canvas re-encode xoá sạch metadata, đọc sau thì không còn gì. Không cần xử lý Orientation: `createImageBitmap` mặc định `imageOrientation: "from-image"` nên ảnh đã xoay đúng trước khi vẽ lên canvas.
+
+`taken_at`: EXIF `DateTimeOriginal` không có múi giờ; exifr trả `Date` theo tz của trình duyệt tác giả. Chấp nhận (một tác giả, chụp ở đâu thì đăng ở đó), ghi ở *Hạn chế đã biết*.
 
 ```
 file -> exifr.parse(file) -> {camera, lens, focal, aperture, shutter, iso, takenAt}
@@ -170,7 +192,9 @@ Bốn điều kiện kỹ thuật:
 
 **Đổi thứ tự**: HTML5 drag-and-drop thuần, không thêm thư viện. Mobile không kéo được nên có thêm nút ‹ › đổi chỗ. Mặc định xếp theo `taken_at`.
 
-**Nháp cứu công.** Lưu nháp sau mỗi mẻ upload; hỏng giữa chừng mở lại vẫn còn. Đúng cơ chế nháp vừa build cho mood-blog.
+**Nháp cứu công.** `photos` cần `album_id` trước khi chèn, nên **row album nháp được tạo NGAY khi bấm "Album mới"** (action `createDraftAlbum` → redirect `/me/anh/[id]`), không có form "tạo mới" riêng. Mỗi ảnh xử lý xong là một insert `photos` gắn vào id đó — hỏng ở ảnh 12/30 thì 11 ảnh đã nằm trong nháp, mở lại tiếp tục. Chữ (tên/địa điểm/mô tả) lưu khi bấm "Lưu nháp" như mood-blog.
+
+**Đổi thứ tự** ghi bằng RPC `reorder_photos(album_id, ids[])` — một câu UPDATE, không 30 round-trip, không upsert đòi đủ cột NOT NULL.
 
 ### Slug: tạm rồi thật
 
@@ -193,7 +217,7 @@ Truy vấn lấy luôn 4 ảnh đầu mỗi album trong cùng một query — ro
 
 Ảnh xem trước đặt `sizes="100px"`, rơi vào biến thể 320 có sẵn, không cần nới `next.config.ts`.
 
-**Nhớ lựa chọn**: `localStorage` key `mb_photo_view`, cộng inline script trong `<head>` đặt `data-view` lên `<html>` trước khi vẽ — đúng khuôn mẫu chống FOUC của dark mode trong `layout.tsx`. Không có script này thì mỗi lần tải sẽ nháy lưới rồi nhảy sang bài viết.
+**Nhớ lựa chọn**: `localStorage` key `mb_photo_view`, đọc trong **cùng** inline script chống FOUC đã có ở `layout.tsx` (thêm 1 dòng đặt `data-view` lên `<html>`), không thêm script thứ hai. Không có bước này thì mỗi lần tải sẽ nháy lưới rồi nhảy sang bài viết.
 
 CSS đọc `data-view` để bố cục đúng ngay lần vẽ đầu; React quyết định có render ảnh xem trước hay không. Hai cơ chế phối hợp: CSS lo khỏi nháy, React lo khỏi tải thừa.
 
@@ -236,7 +260,7 @@ không đổi một dòng.
 
 - `getRecentAlbums(limit = 4)` trong `src/lib/db/albums.ts` — chỉ album đã
   publish, mới nhất trước, mỗi album lấy đúng ảnh bìa.
-- Render trong `src/app/page.tsx`, TRÊN `<FeedList>`, dưới `<MoodFilterChips>`.
+- Render trong `src/app/page.tsx`, TRÊN `<FeedList>`, dưới `<MoodFilterChips>`. Lưu ý `page.tsx` đang `return` sớm khi `posts.length === 0` — dải phải nằm ngoài nhánh đó, không thì có album mà chưa có bài là mất dải.
 - Chưa có album nào thì KHÔNG render gì — không nhắc "chưa có ảnh" (cùng tinh
   thần `DraftList`, `MemoriesSection`).
 - `/` vẫn `revalidate = 300`. Đăng album gọi thêm `revalidatePath("/")`.
@@ -268,9 +292,16 @@ Phục vụ ảnh:
 
 Dòng cuối quan trọng: ảnh đã là webp 2048px sẵn, cho `next/image` xử lý lại chỉ đốt transform mà không thêm gì.
 
-Ước tính 50 album × 30 ảnh ≈ 4500 transforms/tháng nếu toàn bộ được xem lần đầu trong cùng một tháng — sát trần 5K nhưng cache 31 ngày nên thực tế thấp hơn nhiều, chỉ album mới mới tốn.
+**Cache TTL là điều kiện tiên quyết của mọi con số trên.** Vercel tính transform cho cả MISS lẫn STALE; TTL ảnh remote = max(`max-age` upstream, `minimumCacheTTL`). Trước rà soát: Supabase upload mặc định `max-age=3600`, Next 16 mặc định `minimumCacheTTL` 4h → mỗi lần xem lại sau 4h tốn thêm 1 transform, một album 30 ảnh xem 3 lần/ngày đốt ~180/ngày. Đã sửa cùng ngày rà soát (áp cho cả mood-blog):
+- `next.config.ts`: `images.minimumCacheTTL = 2678400` (31 ngày).
+- Mọi `.upload()`: `cacheControl: "31536000"`.
+An toàn vì path ảnh là uuid, không ghi đè (xem *Kiến trúc*).
+
+Với TTL 31 ngày: 50 album × 30 ảnh ≈ 4500 transforms **một lần**, rải theo lúc đăng; tháng bình thường chỉ album mới tốn (~60-90). Xem to dùng `Lightbox` có sẵn (`src/components/ui/Lightbox.tsx`, đã dùng `<img>` thẳng) — không viết lightbox mới.
 
 KHÔNG nới `deviceSizes` trong `next.config.ts` — giữ `[640, 828, 1200]`, mood-blog không bị ảnh hưởng.
+
+SEO/chia sẻ: `sitemap.ts` thêm `/anh` và mọi `/anh/[slug]` đã publish; `/anh/[slug]` có `generateMetadata` với `og:image` = ảnh bìa qua `photoPublicUrl` (cùng khuôn `/m/[slug]`).
 
 ## Ngoài phạm vi (cố ý bỏ)
 
@@ -287,11 +318,19 @@ KHÔNG nới `deviceSizes` trong `next.config.ts` — giữ `[640, 828, 1200]`, 
   không có gì để "import".
 - **Bài mood-blog hiện bên `/anh`** — `/anh` giữ thuần ảnh.
 
+## Hạn chế đã biết
+
+- `taken_at` theo múi giờ trình duyệt lúc đăng, không phải nơi chụp.
+- Tổng tim công khai + INSERT tự do = bơm số ảo được (trade-off đã chấp nhận ở 0010).
+- `albumSlugExists()` chỉ thấy nháp của chính tác giả (như `slugExists` của posts); `slug unique` ở DB là chốt cuối.
+- Ảnh trên Storage vẫn phải dọn trong action trước khi xoá row (FK cascade không dọn Storage).
+
 ## Bất biến phải giữ
 
 - Không hardcode hex màu tâm trạng; khu ảnh không dùng mood.
+- Ảnh Storage immutable: không ghi đè path; đổi ảnh = path mới.
 - Tim ẩn danh: không mở SELECT bảng tim cho anon; tổng chỉ qua view aggregate.
-- `album_comments`: `anon_id`/`anon_ip` REVOKE khỏi SELECT, tầng db dùng danh sách cột tường minh.
+- `album_comments`: SELECT cấp bảng bị rút, chỉ grant danh sách cột công khai (không `anon_id`/`anon_ip`); tầng db vẫn dùng danh sách cột tường minh.
 - Không spinner quay; hover chỉ đổi màu/viền, không chuyển động.
 - Service-role key không chạm client.
 - `supabase.from()` chỉ nằm trong `src/lib/db/`.
