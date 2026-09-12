@@ -40,6 +40,8 @@ Mood Blog: web blog cảm xúc cá nhân (đăng "Khoảnh khắc" + "Góc đọ
 - Light + dark — toggle qua class `.dark` trên `<html>`; chống FOUC bằng inline script ở `layout.tsx`. KHÔNG spinner quay (dùng skeleton tĩnh / mờ dần). KHÔNG nhạc tự bật. Hover chỉ đổi màu/viền, KHÔNG chuyển động.
 - Video: **detail** autoplay MUTED + nút "Bật tiếng"; **feed** chạm-mới-phát INLINE (muted + nút bật tiếng), KHÔNG autoplay-khi-cuộn/Reels. Tôn trọng `prefers-reduced-motion`. KHÔNG autoplay có tiếng.
 - KHÔNG import service-role key vào client (dùng `import 'server-only'`).
+- Prop từ server component sang client component phải **serialize được** (chuỗi/số/object thuần) — KHÔNG truyền object chứa hàm (vd `HeartTarget`); prerender trên Vercel gãy "Functions cannot be passed directly to Client Components" dù `next build` local qua.
+- **Build local sau proxy công ty KHÔNG prerender** (`generateStaticParams` gặp lỗi TLS trả `[]`) nên bỏ lọt lỗi prerender. Gate build phải chạy `npm run build:local` (tắt kiểm TLS) để `/m/[slug]`, `/anh/[slug]` thật sự được prerender như Vercel.
 
 ## Lệnh
 `npm run dev` · `npm run build` · `npm run lint`

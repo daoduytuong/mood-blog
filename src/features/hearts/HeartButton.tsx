@@ -2,7 +2,7 @@
 
 import { useHeart } from "./useHeart";
 import { HeartIcon } from "@/components/ui/HeartIcon";
-import type { HeartTarget } from "./target";
+import type { HeartTargetKind } from "./target";
 
 // Tim kiểu IG: chưa thả = outline mực, đã thả = fill đỏ (--color-like).
 // Một chạm để thả/gỡ; fade màu (không "bụp").
@@ -12,7 +12,7 @@ export function HeartButton({
   id,
   label,
 }: {
-  target: HeartTarget;
+  target: HeartTargetKind;
   id: string;
   label?: string;
 }) {
