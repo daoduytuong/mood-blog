@@ -133,3 +133,10 @@ html {
     opacity: 0;
   }
 }
+
+/* /anh: chế độ "bài viết" một cột — đọc data-view do inline script đặt trước paint,
+   nên không nháy lưới rồi nhảy sang bài viết. */
+html[data-view="editorial"] .album-list {
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
