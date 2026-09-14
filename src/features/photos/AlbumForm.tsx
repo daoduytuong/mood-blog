@@ -136,21 +136,22 @@ export function AlbumForm({ album }: { album: Album }) {
             fail(`Ảnh "${file.name}" chưa xử lý được, bỏ qua.`, `resize: ${describeError(err)}`);
             continue;
           }
-          say(`${tag} -> ${r.width}×${r.height} webp ${mb(r.blob.size)}`);
+          // In KIỂU THẬT của blob: resizeImage() rơi về jpeg khi trình duyệt không
+          // nén được webp lossy, nên đừng đinh ninh là webp.
+          say(`${tag} -> ${r.width}×${r.height} ${r.type} ${mb(r.blob.size)}`);
 
           if (r.blob.size > MAX_UPLOAD_BYTES) {
             // Chặn ở đây để lỗi đọc được; để bucket chặn thì chỉ nhận "Payload too large".
-            const why = `webp ${mb(r.blob.size)} > file_size_limit ${mb(MAX_UPLOAD_BYTES)} của bucket photos`;
             fail(
               `Ảnh "${file.name}" nén xong vẫn ${mb(r.blob.size)}, kho chỉ nhận tối đa ${mb(MAX_UPLOAD_BYTES)}.`,
-              why,
+              `${r.type} ${mb(r.blob.size)} > file_size_limit ${mb(MAX_UPLOAD_BYTES)} của bucket photos`,
             );
             continue;
           }
 
-          const path = `${user.id}/${crypto.randomUUID()}.webp`;
+          const path = `${user.id}/${crypto.randomUUID()}.${r.ext}`;
           const { error: upErr } = await supabase.storage.from("photos").upload(path, r.blob, {
-            contentType: "image/webp",
+            contentType: r.type,
             upsert: false,
             cacheControl: "31536000", // ảnh immutable (path uuid) -> cache 1 năm
           });

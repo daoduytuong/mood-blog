@@ -172,9 +172,10 @@ export async function addPhotoAction(
     console.error("[addPhotoAction]", where, detail);
     return { ok: false, error: "Không tìm thấy album.", detail };
   }
-  if (!path.startsWith(`${user.id}/`) || !path.endsWith(".webp")) {
+  // .jpg là đường lui khi trình duyệt không nén được webp lossy (xem resize-image.ts).
+  if (!path.startsWith(`${user.id}/`) || !/\.(webp|jpg)$/.test(path)) {
     await cleanup();
-    const detail = `path phải là "${user.id}/<uuid>.webp", nhận được "${path}"`;
+    const detail = `path phải là "${user.id}/<uuid>.webp|.jpg", nhận được "${path}"`;
     console.error("[addPhotoAction]", where, detail);
     return { ok: false, error: "Đường dẫn ảnh không hợp lệ.", detail };
   }

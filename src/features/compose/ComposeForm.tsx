@@ -235,11 +235,11 @@ export function ComposeForm({ draft }: { draft?: DraftInit } = {}) {
           setLocalError("Một tấm ảnh chưa xử lý được, thử ảnh khác nhé.");
           return null;
         }
-        const path = `${user.id}/${crypto.randomUUID()}.webp`;
+        const path = `${user.id}/${crypto.randomUUID()}.${r.ext}`;
         const { error: upErr } = await supabase.storage
           .from("media")
           .upload(path, r.blob, {
-            contentType: "image/webp",
+            contentType: r.type,
             upsert: false,
             // Path là uuid, không bao giờ ghi đè -> ảnh immutable, cache 1 năm.
             // Vercel lấy max(max-age upstream, minimumCacheTTL) làm TTL ảnh tối ưu;
