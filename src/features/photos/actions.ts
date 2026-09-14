@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { describeError } from "@/lib/errors";
 import {
   createAlbum,
   getAlbumByIdForAuthor,
@@ -19,6 +20,8 @@ import { uniqueAlbumSlug } from "./slug";
 
 export interface AlbumState {
   error: string | null;
+  /** Nguyên văn lỗi kỹ thuật (mã Postgres/Storage) — chỉ hiện ở màn tác giả. */
+  detail?: string | null;
   ok?: boolean;
 }
 
@@ -83,8 +86,9 @@ export async function saveAlbum(_prev: AlbumState, formData: FormData): Promise<
       shotOn,
       coverPhotoId,
     });
-  } catch {
-    return { error: "Chưa lưu được, thử lại nhé." };
+  } catch (e) {
+    console.error("[saveAlbum]", id, describeError(e), e);
+    return { error: "Chưa lưu được, thử lại nhé.", detail: describeError(e) };
   }
   if (existing.isPublished) revalidateAlbum(existing.slug);
   return { error: null, ok: true };
@@ -107,8 +111,9 @@ export async function publishAlbumAction(prev: AlbumState, formData: FormData): 
   const slug = await uniqueAlbumSlug(supabase, existing.title, "album");
   try {
     await publishAlbum(supabase, existing.id, slug);
-  } catch {
-    return { error: "Chưa đăng được, thử lại nhé." };
+  } catch (e) {
+    console.error("[publishAlbumAction]", id, slug, describeError(e), e);
+    return { error: "Chưa đăng được, thử lại nhé.", detail: describeError(e) };
   }
   revalidateAlbum(slug);
   redirect(`/anh/${slug}`);
@@ -141,27 +146,41 @@ export async function deleteAlbumAction(formData: FormData): Promise<void> {
  */
 export async function addPhotoAction(
   formData: FormData,
-): Promise<{ ok: true; photo: Photo } | { ok: false; error: string }> {
+): Promise<{ ok: true; photo: Photo } | { ok: false; error: string; detail?: string }> {
   const { supabase, user } = await requireUser();
-  if (!user) return { ok: false, error: "Bạn cần đăng nhập đã nhé." };
+  if (!user) {
+    console.error("[addPhotoAction] không có phiên đăng nhập");
+    return { ok: false, error: "Bạn cần đăng nhập đã nhé.", detail: "auth: chưa có user" };
+  }
 
   const albumId = String(formData.get("albumId") ?? "");
   const path = String(formData.get("path") ?? "");
   const cleanup = async () => {
     if (path.startsWith(`${user.id}/`)) await supabase.storage.from("photos").remove([path]);
   };
+  // Một dòng bối cảnh dùng lại cho mọi nhánh hỏng bên dưới.
+  const where = `album=${albumId || "?"} path=${path || "?"}`;
 
   const existing = albumId ? await getAlbumByIdForAuthor(supabase, albumId) : null;
   if (!existing || existing.authorId !== user.id) {
     await cleanup();
-    return { ok: false, error: "Không tìm thấy album." };
+    const detail = !albumId
+      ? "thiếu albumId trong form"
+      : !existing
+        ? `không đọc được album ${albumId} (RLS hoặc album đã bị xoá)`
+        : `album ${albumId} thuộc tác giả khác`;
+    console.error("[addPhotoAction]", where, detail);
+    return { ok: false, error: "Không tìm thấy album.", detail };
   }
   if (!path.startsWith(`${user.id}/`) || !path.endsWith(".webp")) {
     await cleanup();
-    return { ok: false, error: "Đường dẫn ảnh không hợp lệ." };
+    const detail = `path phải là "${user.id}/<uuid>.webp", nhận được "${path}"`;
+    console.error("[addPhotoAction]", where, detail);
+    return { ok: false, error: "Đường dẫn ảnh không hợp lệ.", detail };
   }
   if (existing.photos.length >= MAX_PHOTOS) {
     await cleanup();
+    console.error("[addPhotoAction]", where, `đã có ${existing.photos.length}/${MAX_PHOTOS} ảnh`);
     return { ok: false, error: `Album đã đủ ${MAX_PHOTOS} ảnh — mở album mới nhé.` };
   }
 
@@ -196,9 +215,12 @@ export async function addPhotoAction(
     });
     if (existing.isPublished) revalidateAlbum(existing.slug);
     return { ok: true, photo };
-  } catch {
+  } catch (e) {
+    // insert hỏng -> ảnh vừa upload thành rác: dọn rồi mới báo.
+    const detail = describeError(e);
+    console.error("[addPhotoAction] insertPhoto hỏng", where, detail, e);
     await cleanup();
-    return { ok: false, error: "Chưa lưu được ảnh, thử lại nhé." };
+    return { ok: false, error: "Chưa lưu được ảnh, thử lại nhé.", detail };
   }
 }
 
@@ -214,8 +236,9 @@ export async function removePhotoAction(formData: FormData): Promise<AlbumState>
   if (!photo) return { error: "Không tìm thấy ảnh này." };
   try {
     await deletePhoto(supabase, photoId);
-  } catch {
-    return { error: "Chưa bỏ được ảnh, thử lại nhé." };
+  } catch (e) {
+    console.error("[removePhotoAction]", photoId, describeError(e), e);
+    return { error: "Chưa bỏ được ảnh, thử lại nhé.", detail: describeError(e) };
   }
   await supabase.storage.from("photos").remove([photo.path]);
   if (existing.isPublished) revalidateAlbum(existing.slug);
@@ -247,8 +270,9 @@ export async function reorderPhotosAction(formData: FormData): Promise<AlbumStat
     return { error: "Thứ tự không khớp ảnh trong album." };
   try {
     await reorderPhotos(supabase, albumId, ids);
-  } catch {
-    return { error: "Chưa lưu được thứ tự, thử lại nhé." };
+  } catch (e) {
+    console.error("[reorderPhotosAction]", albumId, describeError(e), e);
+    return { error: "Chưa lưu được thứ tự, thử lại nhé.", detail: describeError(e) };
   }
   if (existing.isPublished) revalidateAlbum(existing.slug);
   return { error: null, ok: true };

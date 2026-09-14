@@ -5,6 +5,7 @@ import { useActionState, useRef, useState, useTransition } from "react";
 import { resizeImage } from "@/features/compose/resize-image";
 import { createClient } from "@/lib/supabase/client";
 import { photoPublicUrl } from "@/lib/storage";
+import { describeError } from "@/lib/errors";
 import type { Album, Photo } from "@/lib/db/albums";
 import { Button } from "@/components/ui/Button";
 import { Field, FormError } from "@/components/ui/Field";
@@ -23,6 +24,10 @@ import {
 
 const initial: AlbumState = { error: null };
 const MAX_PHOTOS = 60; // khớp actions.ts (server vẫn là nơi chốt)
+/** Bucket "photos": file_size_limit 3 MB, allowed_mime_types image/webp (migration 0012). */
+const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
+
+const mb = (n: number) => `${(n / 1024 / 1024).toFixed(2)} MB`;
 
 /**
  * Form album ở /me/anh/[id]. Album đã là row DB (nháp) nên mỗi ảnh xử lý xong
@@ -38,75 +43,158 @@ export function AlbumForm({ album }: { album: Album }) {
   const [cover, setCover] = useState<string>(album.coverPhotoId ?? "");
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  // Nguyên văn lỗi kỹ thuật đi kèm lời nhắn — màn này chỉ tác giả thấy.
+  const [localDetail, setLocalDetail] = useState<string | null>(null);
   const [dragFrom, setDragFrom] = useState<number | null>(null);
+  // Nhật ký hiện THẲNG trên trang: tác giả up ảnh bằng điện thoại, không có dev tool.
+  const [log, setLog] = useState<string[]>([]);
+  const [logOpen, setLogOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const busy = pending || progress !== null;
   const error = localError ?? saveState.error ?? publishState.error;
+  const detail = localError
+    ? localDetail
+    : (saveState.error ? saveState.detail : publishState.detail) ?? null;
 
-  /** Mỗi ảnh: EXIF -> resize -> upload -> addPhotoAction. Thứ tự EXIF trước resize là BẮT BUỘC. */
+  /** Một dòng nhật ký: vào console (máy bàn) VÀ vào state để hiện trên trang (điện thoại). */
+  function say(line: string, bad = false) {
+    const stamp = new Date().toLocaleTimeString("vi-VN", { hour12: false });
+    if (bad) console.error("[album-upload]", line);
+    else console.info("[album-upload]", line);
+    // Cắt 200 dòng: 60 ảnh × vài dòng vẫn gọn, không phình state.
+    setLog((ls) => [...ls, `${stamp} ${bad ? "x" : "·"} ${line}`].slice(-200));
+  }
+
+  function fail(message: string, why?: string | null) {
+    setLocalError(message);
+    setLocalDetail(why ?? null);
+    say(why ? `${message} — ${why}` : message, true);
+    setLogOpen(true); // hỏng thì mở sẵn nhật ký, khỏi phải tìm
+  }
+
+  async function copyLog() {
+    const text = log.join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+    } catch (err) {
+      // clipboard API cần secure context; hụt thì để tác giả tự bôi đen chọn.
+      console.error("[album-upload] chép nhật ký hỏng", describeError(err));
+      setCopied(false);
+    }
+  }
+
+  /**
+   * Mỗi ảnh: EXIF -> resize -> upload -> addPhotoAction. Thứ tự EXIF trước resize là BẮT BUỘC.
+   * Mọi bước đi qua say(): hiện trên trang + vào console, kèm nguyên văn lỗi.
+   * "Chưa tải được ảnh" một mình không nói được là thiếu bucket, sai policy hay ảnh quá nặng.
+   */
   async function onPickFiles(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     e.target.value = "";
     if (files.length === 0) return;
     setLocalError(null);
+    setLocalDetail(null);
     const room = MAX_PHOTOS - photos.length;
-    if (room <= 0) return setLocalError(`Album đã đủ ${MAX_PHOTOS} ảnh.`);
+    if (room <= 0) return fail(`Album đã đủ ${MAX_PHOTOS} ảnh.`);
     // Mặc định xếp theo lúc CHỤP: lastModified là proxy rẻ (không đọc EXIF hai lần);
     // tác giả đổi tay được sau.
     const batch = files.slice(0, room).sort((a, b) => a.lastModified - b.lastModified);
 
     const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return setLocalError("Bạn cần đăng nhập đã nhé.");
+    const { data, error: authErr } = await supabase.auth.getUser();
+    const user = data.user;
+    if (authErr || !user) {
+      console.error("[album-upload] auth.getUser", authErr);
+      return fail("Bạn cần đăng nhập đã nhé.", describeError(authErr ?? "không có phiên đăng nhập"));
+    }
 
+    setCopied(false);
+    say(`— bắt đầu ${batch.length} ảnh · album ${album.id} —`);
+    say(`máy: ${navigator.userAgent}`);
     setProgress({ done: 0, total: batch.length });
     try {
       for (let i = 0; i < batch.length; i++) {
         const file = batch[i];
-        const exif = await readExif(file); // TRƯỚC resize: canvas xoá metadata
-        let r;
+        const at = `ảnh ${i + 1}/${batch.length}`;
+        const tag = `${at} "${file.name}"`;
+        // Bọc CẢ thân vòng: trước đây một cú ném ngoài dự tính (EXIF, mạng đứt giữa
+        // server action) rơi thẳng ra ngoài -> thanh tiến độ biến mất, không chữ nào hiện.
         try {
-          r = await resizeImage(file);
-        } catch {
-          setLocalError(`Ảnh "${file.name}" chưa xử lý được, bỏ qua.`);
-          continue;
-        }
-        const path = `${user.id}/${crypto.randomUUID()}.webp`;
-        const { error: upErr } = await supabase.storage.from("photos").upload(path, r.blob, {
-          contentType: "image/webp",
-          upsert: false,
-          cacheControl: "31536000", // ảnh immutable (path uuid) -> cache 1 năm
-        });
-        if (upErr) {
-          setLocalError(`Chưa tải được "${file.name}", thử lại nhé.`);
+          const t0 = performance.now();
+          say(`${tag} · ${mb(file.size)} · ${file.type || "không rõ kiểu"}`);
+          const exif = await readExif(file); // TRƯỚC resize: canvas xoá metadata
+
+          let r;
+          try {
+            r = await resizeImage(file);
+          } catch (err) {
+            // Hỏng của RIÊNG tấm này (ảnh vỡ, HEIC trình duyệt không giải được) -> đi tiếp.
+            console.error("[album-upload] resize", err);
+            fail(`Ảnh "${file.name}" chưa xử lý được, bỏ qua.`, `resize: ${describeError(err)}`);
+            continue;
+          }
+          say(`${tag} -> ${r.width}×${r.height} webp ${mb(r.blob.size)}`);
+
+          if (r.blob.size > MAX_UPLOAD_BYTES) {
+            // Chặn ở đây để lỗi đọc được; để bucket chặn thì chỉ nhận "Payload too large".
+            const why = `webp ${mb(r.blob.size)} > file_size_limit ${mb(MAX_UPLOAD_BYTES)} của bucket photos`;
+            fail(
+              `Ảnh "${file.name}" nén xong vẫn ${mb(r.blob.size)}, kho chỉ nhận tối đa ${mb(MAX_UPLOAD_BYTES)}.`,
+              why,
+            );
+            continue;
+          }
+
+          const path = `${user.id}/${crypto.randomUUID()}.webp`;
+          const { error: upErr } = await supabase.storage.from("photos").upload(path, r.blob, {
+            contentType: "image/webp",
+            upsert: false,
+            cacheControl: "31536000", // ảnh immutable (path uuid) -> cache 1 năm
+          });
+          if (upErr) {
+            // Hỏng ở tầng bucket (chưa có bucket, sai policy, hết quota, mất mạng) thì
+            // tấm sau hỏng y hệt -> dừng, đừng bắt tác giả chờ hết lượt.
+            console.error("[album-upload] upload", upErr);
+            fail(
+              `Chưa tải được "${file.name}" (${at}) — dừng ở đây.`,
+              `upload ${path}: ${describeError(upErr)}`,
+            );
+            break;
+          }
+
+          const fd = new FormData();
+          fd.set("albumId", album.id);
+          fd.set("path", path);
+          fd.set("w", String(r.width));
+          fd.set("h", String(r.height));
+          fd.set("blurDataURL", r.blurDataURL);
+          if (exif.camera) fd.set("camera", exif.camera);
+          if (exif.lens) fd.set("lens", exif.lens);
+          if (exif.focalLength !== null) fd.set("focalLength", String(exif.focalLength));
+          if (exif.aperture !== null) fd.set("aperture", String(exif.aperture));
+          if (exif.shutter) fd.set("shutter", exif.shutter);
+          if (exif.iso !== null) fd.set("iso", String(exif.iso));
+          if (exif.takenAt) fd.set("takenAt", exif.takenAt);
+          const res = await addPhotoAction(fd);
+          if (!res.ok) {
+            fail(`${res.error} (${at})`, res.detail ?? "addPhotoAction trả lỗi không kèm chi tiết");
+            break;
+          }
+          setPhotos((ps) => [...ps, res.photo]);
+          setProgress({ done: i + 1, total: batch.length });
+          say(`${tag} xong · ${Math.round(performance.now() - t0)}ms`);
+        } catch (err) {
+          console.error("[album-upload] ngoài dự tính", err);
+          fail(`Đứt giữa chừng ở ${at} ("${file.name}").`, describeError(err));
           break;
         }
-        const fd = new FormData();
-        fd.set("albumId", album.id);
-        fd.set("path", path);
-        fd.set("w", String(r.width));
-        fd.set("h", String(r.height));
-        fd.set("blurDataURL", r.blurDataURL);
-        if (exif.camera) fd.set("camera", exif.camera);
-        if (exif.lens) fd.set("lens", exif.lens);
-        if (exif.focalLength !== null) fd.set("focalLength", String(exif.focalLength));
-        if (exif.aperture !== null) fd.set("aperture", String(exif.aperture));
-        if (exif.shutter) fd.set("shutter", exif.shutter);
-        if (exif.iso !== null) fd.set("iso", String(exif.iso));
-        if (exif.takenAt) fd.set("takenAt", exif.takenAt);
-        const res = await addPhotoAction(fd);
-        if (!res.ok) {
-          setLocalError(res.error);
-          break;
-        }
-        setPhotos((ps) => [...ps, res.photo]);
-        setProgress({ done: i + 1, total: batch.length });
       }
     } finally {
       setProgress(null);
+      say("— kết thúc —");
     }
   }
 
@@ -116,7 +204,7 @@ export function AlbumForm({ album }: { album: Album }) {
     fd.set("albumId", album.id);
     fd.set("photoId", photo.id);
     const res = await removePhotoAction(fd);
-    if (res.error) return setLocalError(res.error);
+    if (res.error) return fail(res.error, res.detail ?? null);
     setPhotos((ps) => ps.filter((p) => p.id !== photo.id));
     if (cover === photo.id) setCover("");
   }
@@ -131,7 +219,7 @@ export function AlbumForm({ album }: { album: Album }) {
     const res = await reorderPhotosAction(fd);
     if (res.error) {
       setPhotos(prev);
-      setLocalError(res.error);
+      fail(res.error, res.detail ?? null);
     }
   }
 
@@ -146,6 +234,7 @@ export function AlbumForm({ album }: { album: Album }) {
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLocalError(null);
+    setLocalDetail(null);
     const fd = new FormData(e.currentTarget);
     fd.set("id", album.id);
     fd.set("coverPhotoId", cover);
@@ -274,7 +363,49 @@ export function AlbumForm({ album }: { album: Album }) {
         )}
       </div>
 
-      {error && <FormError>{error}</FormError>}
+      {error && (
+        <div className="flex flex-col gap-1">
+          <FormError>{error}</FormError>
+          {/* Nguyên văn lỗi: chỉ tác giả vào được /me/anh nên hiện thẳng, khỏi mò console. */}
+          {detail && <p className="font-mono text-xs break-words text-text-muted">{detail}</p>}
+        </div>
+      )}
+
+      {/* Nhật ký từng bước — thay dev tool khi up ảnh bằng điện thoại. */}
+      {log.length > 0 && (
+        <details
+          open={logOpen}
+          onToggle={(e) => setLogOpen(e.currentTarget.open)}
+          className="rounded-md border border-border bg-surface p-3"
+        >
+          <summary className="cursor-pointer list-none text-sm text-text-muted hover:text-text">
+            Nhật ký tải ảnh <span className="tabular-nums">({log.length} dòng)</span>
+          </summary>
+          <pre className="mt-2 max-h-64 overflow-auto font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words text-text-muted">
+            {log.join("\n")}
+          </pre>
+          <div className="mt-2 flex items-center gap-3">
+            <Button type="button" variant="quiet" size="sm" onClick={copyLog}>
+              Chép nhật ký
+            </Button>
+            {copied && (
+              <span role="status" className="text-xs text-text-muted">
+                Đã chép.
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setLog([]);
+                setCopied(false);
+              }}
+              className="text-xs text-text-muted hover:text-text"
+            >
+              Xoá nhật ký
+            </button>
+          </div>
+        </details>
+      )}
       {saveState.ok && !error && (
         <p role="status" className="text-sm text-text-muted">Đã lưu.</p>
       )}
