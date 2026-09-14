@@ -1,9 +1,27 @@
 // Resize ảnh phía client trước khi upload (giảm dung lượng, né bodySizeLimit).
 export interface ResizedImage {
   blob: Blob;
+  /** Kiểu THẬT của blob — đừng đinh ninh webp, xem ghi chú ở encode() bên dưới. */
+  type: "image/webp" | "image/jpeg";
+  /** Đuôi khớp `type`, để đặt tên file trong Storage. */
+  ext: "webp" | "jpg";
   width: number;
   height: number;
   blurDataURL: string; // preview ~16px (blur-up, chống CLS) — lưu kèm media
+}
+
+/**
+ * Trần cho một tấm 2048px đã nén CÓ MẤT DỮ LIỆU: thực tế 0.2–0.8 MB.
+ * Vượt trần này nghĩa là encoder không nén lossy thật (xem encode()).
+ */
+const LOSSY_CEILING = 1.5 * 1024 * 1024;
+
+function encode(
+  canvas: HTMLCanvasElement,
+  type: string,
+  quality: number,
+): Promise<Blob | null> {
+  return new Promise((resolve) => canvas.toBlob(resolve, type, quality));
 }
 
 export async function resizeImage(
@@ -29,12 +47,29 @@ export async function resizeImage(
   ctx.drawImage(bitmap, 0, 0, width, height);
   bitmap.close();
 
-  const blob = await new Promise<Blob | null>((resolve) =>
-    canvas.toBlob(resolve, "image/webp", quality),
-  );
-  if (!blob) throw new Error("Resize ảnh thất bại");
+  // canvas.toBlob() KHÔNG báo lỗi khi không nén được kiểu được yêu cầu: theo spec
+  // nó lặng lẽ trả png. WebKit (Safari/Edge/Chrome trên iOS) còn một biến thể nữa:
+  // trả đúng image/webp nhưng bỏ qua `quality` -> webp KHÔNG mất dữ liệu. Cả hai đều
+  // cho ra file gấp cả chục lần (đo thật trên iOS 18.6: 2048×1366 -> 5.26 MB) và
+  // chỉ lộ ra ở CỠ FILE, nên kiểm cả kiểu lẫn cỡ rồi rơi về jpeg — jpeg thì trình
+  // duyệt nào cũng nén lossy đúng.
+  const webp = await encode(canvas, "image/webp", quality);
+  let blob = webp?.type === "image/webp" ? webp : null;
+  if (!blob || blob.size > LOSSY_CEILING) {
+    const jpeg = await encode(canvas, "image/jpeg", quality);
+    if (jpeg?.type === "image/jpeg" && (!blob || jpeg.size < blob.size)) blob = jpeg;
+  }
+  if (!blob) throw new Error("Trình duyệt không nén được ảnh (cả webp lẫn jpeg)");
 
-  return { blob, width, height, blurDataURL: makeBlurDataURL(canvas, width, height) };
+  const type = blob.type === "image/webp" ? "image/webp" : "image/jpeg";
+  return {
+    blob,
+    type,
+    ext: type === "image/webp" ? "webp" : "jpg",
+    width,
+    height,
+    blurDataURL: makeBlurDataURL(canvas, width, height),
+  };
 }
 
 // Thu nhỏ về ~16px (giữ tỷ lệ) -> data URL tí hon làm placeholder blur cho next/image.

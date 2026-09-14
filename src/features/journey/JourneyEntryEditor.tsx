@@ -99,11 +99,11 @@ export function JourneyEntryEditor({
         try { r = await resizeImage(picked.file); }
         catch { return setLocalError("Ảnh chưa xử lý được, thử ảnh khác nhé."); }
 
-        const path = `${user.id}/${crypto.randomUUID()}.webp`;
+        const path = `${user.id}/${crypto.randomUUID()}.${r.ext}`;
         const { error: upErr } = await supabase.storage
           .from("media")
           .upload(path, r.blob, {
-            contentType: "image/webp",
+            contentType: r.type,
             upsert: false,
             // Path là uuid, không bao giờ ghi đè -> ảnh immutable, cache 1 năm.
             // Vercel lấy max(max-age upstream, minimumCacheTTL) làm TTL ảnh tối ưu;
